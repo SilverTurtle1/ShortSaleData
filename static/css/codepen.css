@@ -1,0 +1,106 @@
+html {
+  font-family: 'Lato', sans-serif;
+}
+
+main {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+
+$main: #222;
+
+input.hamburger {
+  display: none;
+  &:checked {
+    & ~ label {
+      > i {
+        background-color: transparent;
+        transform: rotate(90deg);
+        &:before {
+          transform: translate(-50%, 0%) rotate(45deg);
+        }
+        &:after {
+          transform: translate(-50%, 0%) rotate(-45deg);
+        }
+      }
+      > div {
+        &::after {
+          width: 100%;
+        }
+
+        &::before {
+          width: 0;
+        }
+      }
+    }
+  }
+}
+
+label.hamburger {
+  z-index: 9999;
+  position: relative;
+  display: block;
+  height: 50px;
+  width: 50px;
+  &:hover {
+    cursor: pointer;
+  }
+
+  > div {
+    font-size: .8em;
+
+    &::after,
+    &::before {
+      top: 100%;
+      width: 100%;
+      text-align: center;
+      position: absolute;
+      overflow: hidden;
+      transition: width .25s .35s, color .45s .35s;
+    }
+
+    &::after {
+      content: 'CLOSE';
+      right: 0;
+      width: 0;
+    }
+
+    &::before {
+      content: 'MENU';
+      left: 0;
+    }
+  }
+
+  > i {
+    position: absolute;
+    width: 100%;
+    height: 2px;
+    border-radius: 2px;
+    top: 50%;
+    background-color: $main;
+    pointer-events: auto;
+    transition-duration: .35s;
+    transition-delay: .35s;
+    &:before,
+    &:after {
+      position: absolute;
+      border-radius: 2px;
+      display: block;
+      width: 100%;
+      height: 2px;
+      left: 50%;
+      background-color: $main;
+      content: "";
+      transition: transform 0.35s;
+      transform-origin: 50% 50%;
+    }
+    &:before {
+      transform: translate(-50%, -14px);
+    }
+    &:after {
+      transform: translate(-50%, 14px);
+    }
+  }
+}
