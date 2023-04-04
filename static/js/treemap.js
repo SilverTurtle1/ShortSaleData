@@ -164,7 +164,8 @@ const renderTreeMap = (filepath) => {
     oldtreemap = document.getElementById("svg_container").childNodes[0]
     console.log("Before createTreemap, treemap = " + oldtreemap)
 
-    d3.csv(filepath)
+//    d3.csv(filepath)
+      d3.json(filepath)
         .then(function(data) {
     //       console.log("Loading CSV via D3 sending data to Treemap function")
     //       console.log(data)
