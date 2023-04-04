@@ -37,11 +37,11 @@ def index():
 
 
 
-@app.route('/dataset/<start_date>/<end_date>')
-def dataset(start_date=0, end_date=0):
+@app.route('/dataset/<start_date>/<end_date>/<etfs>')
+def dataset(start_date=0, end_date=0, etfs=0):
     if start_date:
         # fetching data for selected date range from FINRA
-        return get_ssdata(start_date, end_date)
+        return get_ssdata(start_date, end_date, etfs)
         # return render_template('index.html')
         # return jsonify({"success": "Data loaded for "+ start_date})
     else:

@@ -11,7 +11,7 @@ from datetime import timedelta
 
 finra_dir = r'https://cdn.finra.org/equity/regsho/daily/CNMSshvol'
 data_dir = r'static/data/'
-mapping_file = 'etfMapping.csv'
+mapping_file = 'etfMapping-backup.csv'
 min_volume = 5000000
 
 
@@ -32,7 +32,7 @@ def get_csv(url):
         print("Invalid URL passed")
 
 
-def get_ssdata(startdate, enddate=0):
+def get_ssdata(startdate, enddate=0, etfs=0):
     file_date = re.sub("\/", "", startdate)
     finra_df = pd.DataFrame()
     print(enddate)
@@ -45,7 +45,7 @@ def get_ssdata(startdate, enddate=0):
     else:
         numDays = 0
 
-    etfOnly = False
+    etfOnly = True
 
     print("Top of try")
     for i in values:
