@@ -68,6 +68,9 @@ def get_ssdata(startdate, enddate=0):
 
         except requests.HTTPError as e:
             print(f"[!] Exception caught: {e}{file_date}")
+            continue
+            # if finra_df.empty:
+            #     prior_day = datetime.strptime(file_date, '%Y%m%d') - timedelta(days=1)
 
     print("Post Loop")
     print(finra_df)
@@ -159,9 +162,12 @@ def get_ssdata(startdate, enddate=0):
             # Ideally we iterate backwards for start date providing most recent ... would then need to update dropdown
 
             continue
+        print("dataframe")
+        print(final_df)
         print("Display JSON")
-        print(final_df.to_json())
-        return final_df.to_json()
+        print(final_df.to_json(orient='records'))
+        return final_df.to_json(orient='records')
+
 
 
 
