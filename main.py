@@ -36,10 +36,6 @@ def index():
     return render_template('index.html')
 
 
-@app.route('/dashboard')
-def dashboard():
-    get_ssdata("20230403", "20230403")
-    return render_template('index.html')
 
 @app.route('/dataset/<start_date>/<end_date>')
 def dataset(start_date=0, end_date=0):

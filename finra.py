@@ -148,7 +148,7 @@ def get_ssdata(startdate, enddate=0):
                 # writer = pd.ExcelWriter("SSData.xlsx", engine='xlsxwriter')
                 # ssdata_temp.to_excel(writer,sheet_name=file_date, index=False)
                 # print(os.path.join(src_dir, data_dir, "SSData.csv"))
-                final_df.to_csv(os.path.join(src_dir, data_dir, "SSData.csv"), sep=',', encoding='utf-8', index=False)
+                # final_df.to_csv(os.path.join(src_dir, data_dir, "SSData.csv"), sep=',', encoding='utf-8', index=False)
                 # print(mapped_df)
                 # writer.save()
 
