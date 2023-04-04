@@ -32,7 +32,7 @@ def csv_to_json(csvFilePath, jsonFilePath):
 # Routing do define url
 @app.route('/')
 def index():
-    get_ssdata("20230403", "20230403")
+    get_ssdata("20230404", "20230404")
     return render_template('index.html')
 
 

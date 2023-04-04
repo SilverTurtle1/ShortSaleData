@@ -56,13 +56,13 @@ def get_ssdata(startdate, enddate=0, etfs=0):
         print(finra_file)
         try:
             ssdata_temp = get_csv(finra_file)
-            print("FINRA File")
-            print(i)
+            # print("FINRA File")
+            # print(i)
             temp_df = ssdata_temp[(ssdata_temp.TotalVolume > min_volume)]
             print(temp_df)
             if finra_df.empty:
                 finra_df = temp_df.copy()
-                print("finra_df was empty")
+                # print("finra_df was empty")
             else:
                 finra_df = finra_df.append(temp_df.copy())
 
@@ -72,14 +72,14 @@ def get_ssdata(startdate, enddate=0, etfs=0):
             # if finra_df.empty:
             #     prior_day = datetime.strptime(file_date, '%Y%m%d') - timedelta(days=1)
 
-    print("Post Loop")
-    print(finra_df)
+    # print("Post Loop")
+    # print(finra_df)
     finra_df = finra_df.groupby('Symbol').sum().reset_index()
-    print(finra_df)
+    # print(finra_df)
 
     while True:
         try:
-            print("In Try")
+            # print("In Try")
             # print(file_date)
             # finra_file = finra_dir + f'{file_date}.txt'
             # print(finra_file)
@@ -89,7 +89,7 @@ def get_ssdata(startdate, enddate=0, etfs=0):
 
             finra_df['Percentile'] = finra_df.TotalVolume.rank(pct = True)
             finra_df = finra_df[(finra_df.Percentile > 0.5)]
-            print(finra_df)
+            # print(finra_df)
             src_dir = os.path.dirname(os.path.abspath(__file__))
             final_df = pd.DataFrame()
 
@@ -97,8 +97,12 @@ def get_ssdata(startdate, enddate=0, etfs=0):
 
                 # print(os.path.join(src_dir, mapping_file))
                 etf_df = pd.read_csv(os.path.join(src_dir, data_dir, mapping_file))
-                # print("Mapping File")
-                # print(etf_df)
+                print("Mapping File Pre Filter")
+                print(etfs)
+                if etfs != 0:
+                    etf_df = etf_df[etf_df["Fund"].isin(list(etfs.split(",")))]
+                    # print("Mapping File Post Filter")
+                    # print(etf_df)
 
                 etf_symbols = etf_df["Fund"].to_frame()
                 etf_symbols = etf_symbols.drop_duplicates()
@@ -128,7 +132,7 @@ def get_ssdata(startdate, enddate=0, etfs=0):
             else:
                 finra_df["Short%"] = finra_df["ShortVolume"] / finra_df["TotalVolume"]
                 finra_df["name"] = "None." + finra_df["Symbol"]
-                print("HERE0")
+                # print("HERE0")
                 finra_df.drop(
                     # columns=['Market', "Date", "ShortVolume", "ShortExemptVolume", "Symbol"],
                     # inplace=True)
@@ -136,13 +140,13 @@ def get_ssdata(startdate, enddate=0, etfs=0):
                 decimals = 2
                 finra_df['Short%'] = finra_df['Short%'].apply(lambda x: round(x, decimals))
                 finra_df = finra_df[finra_df["Short%"] != 0]
-                print("HERE1)")
+                # print("HERE1)")
                 # ssdata_temp.loc[0] = ["", "", "origin"]  # adding a row
                 # finra_df = finra_df.drop(finra_df.index[-1]) # delete last row
                 finra_df.rename(columns={'Short%': 'value', 'TotalVolume': 'size'}, inplace=True)
-                print("HERE2)")
+                # print("HERE2)")
                 finra_df = finra_df[finra_df.name != '']
-                print("HERE3)")
+                # print("HERE3)")
                 final_df = finra_df
 
                 # writer = pd.ExcelWriter("SSData.xlsx", engine='xlsxwriter')
@@ -162,10 +166,10 @@ def get_ssdata(startdate, enddate=0, etfs=0):
             # Ideally we iterate backwards for start date providing most recent ... would then need to update dropdown
 
             continue
-        print("dataframe")
-        print(final_df)
-        print("Display JSON")
-        print(final_df.to_json(orient='records'))
+        # print("dataframe")
+        # print(final_df)
+        # print("Display JSON")
+        # print(final_df.to_json(orient='records'))
         return final_df.to_json(orient='records')
 
 

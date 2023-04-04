@@ -213,7 +213,7 @@
 <div id="checkboxes">
     <p></p>
     <script>
-        const funds = ["SPX","XLK","XLF","XRT"];
+        const funds = ["SPX","XLB","XLC","XLE","XLF","XLI","XLK","XLP","XLU","XLV","XLY", "XRT"];
         funds.forEach((fund)=>{
             //  generate id
             const id = `fund-${fund}`;
@@ -238,20 +238,20 @@
             document.querySelector("#checkboxes").appendChild(label);
         });
     </script>
-    <p>
-        <button id="btn">Use Selected ETFs</button>
-    </p>
-    <script>
-        const btn = document.querySelector('#btn');
-        btn.addEventListener('click', (event) => {
-            let checkboxes = document.querySelectorAll('input[name="fund"]:checked');
-            let values = [];
-            checkboxes.forEach((checkbox) => {
-                values.push(checkbox.value);
-            });
-            alert(values);
-        });
-    </script>
+<!--    <p>-->
+<!--        <button id="btn">Use Selected ETFs</button>-->
+<!--    </p>-->
+<!--    <script>-->
+<!--        const btn = document.querySelector('#btn');-->
+<!--        btn.addEventListener('click', (event) => {-->
+<!--            let checkboxes = document.querySelectorAll('input[name="fund"]:checked');-->
+<!--            let values = [];-->
+<!--            checkboxes.forEach((checkbox) => {-->
+<!--                values.push(checkbox.value);-->
+<!--            });-->
+<!--            alert(values);-->
+<!--        });-->
+<!--    </script>-->
 </div>
 <!--<script>-->
 <!--    // Get the modal-->
@@ -296,7 +296,7 @@
             new DateRangePicker('datetimerange-input1',
                 {
                     timePicker: true,
-                    maxDate: "04/03/2023",
+                    maxDate: "04/04/2023",
                     opens: 'left',
                     ranges: {
                         'Today': [moment().startOf('day'), moment().endOf('day')],

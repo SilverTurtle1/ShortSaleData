@@ -46,13 +46,13 @@ function createTreemap(data, { // data is either tabular (array of objects) or h
   // to convert tabular data to a hierarchy; otherwise we assume that the data is
   // specified as an object {children} with nested objects (a.k.a. the “flare.json”
   // format), and use d3.hierarchy.
-  console.log("In CreateTreemap")
+//  console.log("In CreateTreemap")
 
   const root = path != null ? d3.stratify().path(path)(data)
       : id != null || parentId != null ? d3.stratify().id(id).parentId(parentId)(data)
       : d3.hierarchy(data, children);
-    console.log("root")
-    console.log(root)
+//    console.log("root")
+//    console.log(root)
     var dataScale = d3.scaleLog()
     .domain([d3.min(data, function(d){return d.value}),
          d3.max(data, function(d){return d.value})]);
@@ -73,7 +73,7 @@ dataScale.range([0,100]); //here you can choose a hard coded a
 
   // Prior to sorting, if a group channel is specified, construct an ordinal color scale.
   const leaves = root.leaves();
-  console.log(root)
+//  console.log(root)
 //  const G = group == null ? null : leaves.map(d => group(d.data, d));
     const G = group == null ? null : leaves.map(d => percentRange(d.data, d));
 
@@ -196,8 +196,8 @@ const renderTreeMap = (filepath) => {
 
 
 const renderJSONTreeMap = (jsonData) => {
-    console.log("In JSON Treemap")
-    console.log(jsonData)
+//    console.log("In JSON Treemap")
+//    console.log(jsonData)
     oldtreemap = document.getElementById("svg_container").childNodes[0]
 //    d3.json(jsonData)
 //        .then(function(data) {
@@ -215,9 +215,9 @@ const renderJSONTreeMap = (jsonData) => {
                 width: 1152,
                 height: 1152
            })
-           console.log("Built JSON Treemap")
-           console.log("JSON Treemap =")
-           console.log(treemap)
+//           console.log("Built JSON Treemap")
+//           console.log("JSON Treemap =")
+//           console.log(treemap)
            if (typeof oldtreemap === 'undefined') document.getElementById("svg_container").appendChild(treemap);
            else document.getElementById("svg_container").replaceChild(treemap, oldtreemap);
 
