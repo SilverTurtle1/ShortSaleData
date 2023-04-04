@@ -159,7 +159,11 @@ def get_ssdata(startdate, enddate=0):
             # Ideally we iterate backwards for start date providing most recent ... would then need to update dropdown
 
             continue
-        break
+        print("Display JSON")
+        print(final_df.to_json())
+        return final_df.to_json()
+
+
 
 
 

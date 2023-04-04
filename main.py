@@ -45,8 +45,9 @@ def dashboard():
 def dataset(start_date=0, end_date=0):
     if start_date:
         # fetching data for selected date range from FINRA
-        get_ssdata(start_date, end_date)
-        return jsonify({"success": "Data loaded for "+ start_date})
+        return get_ssdata(start_date, end_date)
+        # return render_template('index.html')
+        # return jsonify({"success": "Data loaded for "+ start_date})
     else:
         return jsonify({"error": "Could not load data for " + start_date})
 
