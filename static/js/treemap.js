@@ -46,10 +46,13 @@ function createTreemap(data, { // data is either tabular (array of objects) or h
   // to convert tabular data to a hierarchy; otherwise we assume that the data is
   // specified as an object {children} with nested objects (a.k.a. the “flare.json”
   // format), and use d3.hierarchy.
+  console.log("In CreateTreemap")
+
   const root = path != null ? d3.stratify().path(path)(data)
       : id != null || parentId != null ? d3.stratify().id(id).parentId(parentId)(data)
       : d3.hierarchy(data, children);
-
+    console.log("root")
+    console.log(root)
     var dataScale = d3.scaleLog()
     .domain([d3.min(data, function(d){return d.value}),
          d3.max(data, function(d){return d.value})]);
@@ -164,11 +167,10 @@ const renderTreeMap = (filepath) => {
     oldtreemap = document.getElementById("svg_container").childNodes[0]
     console.log("Before createTreemap, treemap = " + oldtreemap)
 
-//    d3.csv(filepath)
-      d3.json(filepath)
+    d3.csv(filepath)
         .then(function(data) {
     //       console.log("Loading CSV via D3 sending data to Treemap function")
-    //       console.log(data)
+           console.log(data)
             treemap = createTreemap(data, {
                 path: d => d.name.replace(/\./g, "/"), // e.g., "flare/animate/Easing
                 size: d => d?.size, // size of each node (file); null for internal nodes (folders)
@@ -190,4 +192,35 @@ const renderTreeMap = (filepath) => {
 
 //           document.getElementById("svg_container").appendChild(treemap);
     });
+}
+
+
+const renderJSONTreeMap = (jsonData) => {
+    console.log("In JSON Treemap")
+    console.log(jsonData)
+    oldtreemap = document.getElementById("svg_container").childNodes[0]
+//    d3.json(jsonData)
+//        .then(function(data) {
+//           console.log(data)
+            treemap = createTreemap(jsonData, {
+                path: d => d.name.replace(/\./g, "/"),
+                size: d => d?.size, // size of each node (file); null for internal nodes (folders)
+                value: d => d?.value, // value attribute of each node (file); null for internal nodes (folders)
+                group: d => d.name.split(".")[0], // e.g., "animate" in "flare.animate.Easing"; for color
+            <!--    label: (d, n) => [...d.name.split(".").pop().split(/(?=[A-Z][a-z])/g), n.value.toLocaleString("en"), d?.value].join("\n"),-->
+                label: (d, n) => [...d.name.split(".").pop().split(/(?=[A-Z][a-z])/g), d?.value].join("\n"),
+                title: (d, n) => `${d.name}\n${n.value.toLocaleString("en")}`, // text to show on hover
+            <!--    link: (d, n) => `https://github.com/prefuse/Flare/blob/master/flare/src${n.id}.as`,-->
+                tile: d3.treemapBinary,
+                width: 1152,
+                height: 1152
+           })
+           console.log("Built JSON Treemap")
+           console.log("JSON Treemap =")
+           console.log(treemap)
+           if (typeof oldtreemap === 'undefined') document.getElementById("svg_container").appendChild(treemap);
+           else document.getElementById("svg_container").replaceChild(treemap, oldtreemap);
+
+//           document.getElementById("svg_container").appendChild(treemap);
+//    });
 }

@@ -271,18 +271,22 @@
                         daterange['end_date'] = end.format("YYYYMMDD");
 
                         // update data source
-                         renderTreeMap(fetch('/dataset/'+ daterange['start_date'] +'/'+ daterange['end_date']))
+                        fetch('/dataset/'+ daterange['start_date'] +'/'+ daterange['end_date'])
                             .then(function(response){
 <!--                                response.json().then(function(data){-->
 <!--                                    if(!("error" in data)){-->
 <!--                                        console.log(data);-->
 <!--                                renderTreeMap("/static/data/SSData.csv");-->
+                                response.json().then(function(response){
+                                    renderJSONTreeMap(response);
+                                })
 
                         })
+<!--
 <!--                        modal.style.display = "block";-->
                 })
         });
-  renderTreeMap("/static/data/SSData.csv");
+ renderTreeMap("/static/data/SSData.csv");
 
 
 </script>
