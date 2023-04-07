@@ -32,9 +32,13 @@ def csv_to_json(csvFilePath, jsonFilePath):
 # Routing do define url
 @app.route('/')
 def index():
-    get_ssdata("20230404", "20230404")
+    # get_ssdata("20230404", "20230404")
     return render_template('index.html')
 
+@app.route('/about')
+def about():
+    # get_ssdata("20230404", "20230404")
+    return render_template('about.html')
 
 
 @app.route('/dataset/<start_date>/<end_date>/<etfs>')

@@ -10,6 +10,7 @@ function createTreemap(data, { // data is either tabular (array of objects) or h
   children, // if hierarchical data, given a d in data, returns its children
   size, // given a node d, returns a quantitative value (for area encoding; null for count)
   value, // given a node d, returns a quantitative value attribute (for area encoding; null for count)
+  gain, // percent gain through selected time period
   sort = (a, b) => d3.descending(a.value, b.value), // how to sort nodes prior to layout
   label, // given a leaf node d, returns the name to display on the rectangle
   group, // given a leaf node d, returns a categorical value (for color encoding)
@@ -87,6 +88,7 @@ dataScale.range([0,100]); //here you can choose a hard coded a
   const L = label == null ? null : leaves.map(d => label(d.data, d));
   console.log(L)
   const T = title === undefined ? L : title == null ? null : leaves.map(d => title(d.data, d));
+  const R = gain === undefined ? L : gain == null ? null : leaves.map(d => gain(d.data, d));
 
   // Sort the leaves (typically by descending value for a pleasing layout).
   if (sort != null) root.sort(sort);
@@ -133,6 +135,10 @@ dataScale.range([0,100]); //here you can choose a hard coded a
     node.append("title").text((d, i) => T[i]);
   }
 
+  if (R) {
+    node.append("gain").text((d, i) => R[i]);
+  }
+
   if (L) {
     // A unique identifier for clip paths (to avoid conflicts).
     const uid = `O-${Math.random().toString(16).slice(2)}`;
@@ -152,7 +158,7 @@ dataScale.range([0,100]); //here you can choose a hard coded a
         .attr("y", (d, i, D) => `${(i === D.length - 1) * 0.3 + 1.1 + i * 0.9}em`)
 //        .attr("fill-opacity", (d, i, D) => i === D.length - 1 ? 0.7 : null)
         .attr("fill-opacity", (d, i, D) => i === D.length - 1 ? 0.7 : null)
-        .text((d, i, D) => i === D.length - 1 ? parseFloat(d*100).toFixed(0)+"%" : d)
+        .text((d, i, D) => i === D.length - 1 ? parseFloat(d*100).toFixed(2)+"%" : d)
         .attr("font-size", (d, i, D) => i === D.length - 1 ? 14: 12)
         .style("fill", (d, i, D) => i === D.length - 1 ? "black": "white");
 
@@ -206,9 +212,10 @@ const renderJSONTreeMap = (jsonData) => {
                 path: d => d.name.replace(/\./g, "/"),
                 size: d => d?.size, // size of each node (file); null for internal nodes (folders)
                 value: d => d?.value, // value attribute of each node (file); null for internal nodes (folders)
+                gain: d=> d?.gain,
                 group: d => d.name.split(".")[0], // e.g., "animate" in "flare.animate.Easing"; for color
             <!--    label: (d, n) => [...d.name.split(".").pop().split(/(?=[A-Z][a-z])/g), n.value.toLocaleString("en"), d?.value].join("\n"),-->
-                label: (d, n) => [...d.name.split(".").pop().split(/(?=[A-Z][a-z])/g), d?.value].join("\n"),
+                label: (d, n) => [...d.name.split(".").pop().split(/(?=[A-Z][a-z])/g), d?.value, d?.gain].join("\n"),
                 title: (d, n) => `${d.name}\n${n.value.toLocaleString("en")}`, // text to show on hover
             <!--    link: (d, n) => `https://github.com/prefuse/Flare/blob/master/flare/src${n.id}.as`,-->
                 tile: d3.treemapBinary,
