@@ -77,8 +77,8 @@ function createTreemap(data, { // data is either tabular (array of objects) or h
 //    console.log("root")
 //    console.log(root)
     var dataScale = d3.scaleLog()
-    .domain([d3.min(data, function(d){return d.value}),
-         d3.max(data, function(d){return d.value})]);
+    .domain([d3.min(data, function(d){return d.size}),
+         d3.max(data, function(d){return d.size})]);
 
 
     var percentRange = (data, function(d) {
@@ -87,12 +87,10 @@ function createTreemap(data, { // data is either tabular (array of objects) or h
     })
 
 
-    dataScale.range([0,100]);
-
-dataScale.range([0,100]); //here you can choose a hard coded a
+    dataScale.range([0,100]); //here you can choose a hard coded a
 
   // Compute the size of internal nodes by aggregating from the leaves.
-  size == null ? root.count() : root.sum(d => Math.max(0, dataScale(d?.value)));
+  size == null ? root.count() : root.sum(d => Math.max(0, dataScale(d?.size)));
 
   // Prior to sorting, if a group channel is specified, construct an ordinal color scale.
   const leaves = root.leaves();
@@ -205,7 +203,7 @@ dataScale.range([0,100]); //here you can choose a hard coded a
         .attr("y", function (d, i, D) {
           const parentData = d3.select(this.parentNode).datum();
           var ctrPos = (parentData.y1 - parentData.y0) / 2;
-          if (i == D.length - 1) return ctrPos - 4;
+          if (i == D.length - 1) return ctrPos;
           else return `${1.1 + i * 0.9}em`
         })
 //        .attr("y", (d, i, D) => `${(i === D.length - 1) * 0.3 + 1.1 + i * 0.9}em`)
@@ -258,7 +256,7 @@ const renderTreeMap = (filepath) => {
 
 const renderJSONTreeMap = (jsonData) => {
 //    console.log("In JSON Treemap")
-//    console.log(jsonData)
+       console.log(jsonData)
     oldtreemap = document.getElementById("svg_container").childNodes[0]
 //    d3.json(jsonData)
 //        .then(function(data) {
@@ -271,7 +269,7 @@ const renderJSONTreeMap = (jsonData) => {
                 group: d => d.name.split(".")[0], // e.g., "animate" in "flare.animate.Easing"; for color
             <!--    label: (d, n) => [...d.name.split(".").pop().split(/(?=[A-Z][a-z])/g), n.value.toLocaleString("en"), d?.value].join("\n"),-->
                 label: (d, n) => [, d?.value, d?.gain, ...d.name.split(".").pop().split(/(?=[A-Z][a-z])/g)].join("\n"),
-                title: (d, n) => `${d.name}\n${n.value.toLocaleString("en")}`, // text to show on hover
+                title: (d, n) => `${d.name}\n${d.value.toLocaleString("en")}\n${d.size.toLocaleString("en")}`, // text to show on hover
             <!--    link: (d, n) => `https://github.com/prefuse/Flare/blob/master/flare/src${n.id}.as`,-->
                 tile: d3.treemapBinary,
                 width: 1152,
