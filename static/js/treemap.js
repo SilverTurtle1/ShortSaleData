@@ -2,6 +2,28 @@
 // Released under the ISC license.
 // https://observablehq.com/@d3/treemap
 var treemap
+var Grp
+var rectColor = d3.local();
+
+function shadeColor(color, percent) {
+          var R = parseInt(color.substring(1,3),16);
+          var G = parseInt(color.substring(3,5),16);
+          var B = parseInt(color.substring(5,7),16);
+
+          R = parseInt(R * (100 + percent) / 100);
+          G = parseInt(G * (100 + percent) / 100);
+          B = parseInt(B * (100 + percent) / 100);
+
+          R = (R<255)?R:255;
+          G = (G<255)?G:255;
+          B = (B<255)?B:255;
+
+          var RR = ((R.toString(16).length==1)?"0"+R.toString(16):R.toString(16));
+          var GG = ((G.toString(16).length==1)?"0"+G.toString(16):G.toString(16));
+          var BB = ((B.toString(16).length==1)?"0"+B.toString(16):B.toString(16));
+
+          return "#"+RR+GG+BB;
+      }
 
 function createTreemap(data, { // data is either tabular (array of objects) or hierarchy (nested objects)
   path, // as an alternative to id and parentId, returns an array identifier, imputing internal nodes
@@ -76,19 +98,19 @@ dataScale.range([0,100]); //here you can choose a hard coded a
   const leaves = root.leaves();
 //  console.log(root)
 //  const G = group == null ? null : leaves.map(d => group(d.data, d));
-    const G = group == null ? null : leaves.map(d => percentRange(d.data, d));
+   Grp = group == null ? null : leaves.map(d => percentRange(d.data, d));
 
 
 
-  if (zDomain === undefined) zDomain = G;
+  if (zDomain === undefined) zDomain = Grp;
   zDomain = new d3.InternSet(zDomain);
   const color = group == null ? null : d3.scaleOrdinal(zDomain, colors);
 
   // Compute labels and titles.
   const L = label == null ? null : leaves.map(d => label(d.data, d));
-  console.log(L)
   const T = title === undefined ? L : title == null ? null : leaves.map(d => title(d.data, d));
   const R = gain === undefined ? L : gain == null ? null : leaves.map(d => gain(d.data, d));
+
 
   // Sort the leaves (typically by descending value for a pleasing layout).
   if (sort != null) root.sort(sort);
@@ -110,8 +132,9 @@ dataScale.range([0,100]); //here you can choose a hard coded a
       .attr("width", width)
       .attr("height", height)
       .attr("style", "max-width: 100%; height: auto; height: intrinsic;")
-      .attr("font-family", "sans-serif")
+      .attr("font-family", "work sans")
       .attr("font-size", 12)
+      .attr("font-weight", "light")
       .attr("fill", "white");
 
   const node = svg.selectAll("a")
@@ -122,14 +145,32 @@ dataScale.range([0,100]); //here you can choose a hard coded a
       .attr("transform", d => `translate(${d.x0},${d.y0})`);
 
   node.append("rect")
-      .attr("fill", color ? (d, i) => color(G[i]) : fill)
+//      .attr("fill", color ? (d, i) => color(G[i]) : fill)
+      .attr("fill", color ? function(d, i) {
+//        console.log(Grp[i]);
+//        console.log(color(Grp[i]));
+//        console.log(color(percentRange(d.data, d)));
+        return color(Grp[i]);
+       } : fill)
       .attr("fill-opacity", fillOpacity)
       .attr("stroke", stroke)
       .attr("stroke-width", strokeWidth)
       .attr("stroke-opacity", strokeOpacity)
       .attr("stroke-linejoin", strokeLinejoin)
       .attr("width", d => d.x1 - d.x0)
-      .attr("height", d => d.y1 - d.y0);
+      .attr("height", d => d.y1 - d.y0)
+      .on("mouseover", function(d, i) {
+        rectColor.set(this, d3.select(this).attr("fill"));
+        d3.select(this).attr("fill", shadeColor(d3.select(this).attr("fill"), -15));
+       })
+       .on("mouseout", function(d, i) {
+        var oldColor = rectColor.get(this)
+        d3.select(this).attr("fill", oldColor);
+       });
+//       .each(function(d) { previousData.set(this, d) });
+
+
+
 
   if (T) {
     node.append("title").text((d, i) => T[i]);
@@ -150,17 +191,31 @@ dataScale.range([0,100]); //here you can choose a hard coded a
        .attr("height", d => d.y1 - d.y0);
 
     node.append("text")
+
         .attr("clip-path", (d, i) => `url(${new URL(`#${uid}-clip-${i}`, location)})`)
-      .selectAll("tspan")
-      .data((d, i) => `${L[i]}`.split(/\n/g))
-      .join("tspan")
-        .attr("x", 3)
-        .attr("y", (d, i, D) => `${(i === D.length - 1) * 0.3 + 1.1 + i * 0.9}em`)
+        .selectAll("tspan")
+        .data((d, i) => `${L[i]}`.split(/\n/g))
+        .join("tspan")
+//        .attr("text-anchor", (d, i, D) => i === D.length - 1 ? "middle": "middle");
+        .attr("x", function (d, i, D) {
+          const parentData = d3.select(this.parentNode).datum();
+          var ctrPos = (parentData.x1 - parentData.x0) / 2;
+          return i === D.length - 1 ? ctrPos : 3;
+        })
+        .attr("y", function (d, i, D) {
+          const parentData = d3.select(this.parentNode).datum();
+          var ctrPos = (parentData.y1 - parentData.y0) / 2;
+          if (i == D.length - 1) return ctrPos - 4;
+          else return `${1.1 + i * 0.9}em`
+        })
+//        .attr("y", (d, i, D) => `${(i === D.length - 1) * 0.3 + 1.1 + i * 0.9}em`)
 //        .attr("fill-opacity", (d, i, D) => i === D.length - 1 ? 0.7 : null)
         .attr("fill-opacity", (d, i, D) => i === D.length - 1 ? 0.7 : null)
-        .text((d, i, D) => i === D.length - 1 ? parseFloat(d*100).toFixed(2)+"%" : d)
-        .attr("font-size", (d, i, D) => i === D.length - 1 ? 14: 12)
-        .style("fill", (d, i, D) => i === D.length - 1 ? "black": "white");
+        .text((d, i, D) => i === D.length - 2 ? parseFloat(d*100).toFixed(1)+"%" : d)
+        .attr("font-size", (d, i, D) => i === D.length - 1 ? 20: 12)
+        .style("fill", (d, i, D) => i === D.length - 1 ? "white": "white");
+
+
 
 
   }
@@ -215,7 +270,7 @@ const renderJSONTreeMap = (jsonData) => {
                 gain: d=> d?.gain,
                 group: d => d.name.split(".")[0], // e.g., "animate" in "flare.animate.Easing"; for color
             <!--    label: (d, n) => [...d.name.split(".").pop().split(/(?=[A-Z][a-z])/g), n.value.toLocaleString("en"), d?.value].join("\n"),-->
-                label: (d, n) => [...d.name.split(".").pop().split(/(?=[A-Z][a-z])/g), d?.value, d?.gain].join("\n"),
+                label: (d, n) => [, d?.value, d?.gain, ...d.name.split(".").pop().split(/(?=[A-Z][a-z])/g)].join("\n"),
                 title: (d, n) => `${d.name}\n${n.value.toLocaleString("en")}`, // text to show on hover
             <!--    link: (d, n) => `https://github.com/prefuse/Flare/blob/master/flare/src${n.id}.as`,-->
                 tile: d3.treemapBinary,
