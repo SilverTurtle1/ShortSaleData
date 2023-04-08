@@ -153,6 +153,7 @@ def get_ssdata(startdate, enddate=0, etfs=0):
                 # print(closingprices_df)
                 closingprices_df[['close_x', 'close_y']] = closingprices_df[['close_x','close_y']].astype(float)
                 closingprices_df['gain'] = ((closingprices_df['close_y']/closingprices_df['close_x'])-1)
+                closingprices_df['rectColor'] = ""
                 # print(closingprices_df)
                 # print('mapped df row count ', len(mapped_df.index))
                 # print('closing prices row count ', len(closingprices_df.index))
