@@ -4,6 +4,12 @@
 var treemap
 var Grp
 var rectColor = d3.local();
+//#7acc33 - bright green
+//#3d8c40 - dull green
+//#7a221b - dull red
+//#f44336 - bright red
+
+const percentColors = [ '#7acc33 ', '#3d8c40', '#f44336', '#7a221b ' ]
 
 function shadeColor(color, percent) {
           var R = parseInt(color.substring(1,3),16);
@@ -100,9 +106,19 @@ function createTreemap(data, { // data is either tabular (array of objects) or h
 
 
 
-  if (zDomain === undefined) zDomain = Grp;
-  zDomain = new d3.InternSet(zDomain);
-  const color = group == null ? null : d3.scaleOrdinal(zDomain, colors);
+//  if (zDomain === undefined) zDomain = Grp;
+//  zDomain = new d3.InternSet(zDomain);
+  const color = group == null ? null : (
+    d3.scaleOrdinal()
+        .domain(["strong buy", "buy", "strong sell", "sell"])
+        .range(percentColors)
+  );
+
+
+  // prepare a color scale
+//  var color = d3.scaleOrdinal()
+//    .domain(["boss1", "boss2", "boss3"])
+//    .range([ "#402D54", "#D18975", "#8FD175"])
 
   // Compute labels and titles.
   const L = label == null ? null : leaves.map(d => label(d.data, d));
@@ -145,10 +161,7 @@ function createTreemap(data, { // data is either tabular (array of objects) or h
   node.append("rect")
 //      .attr("fill", color ? (d, i) => color(G[i]) : fill)
       .attr("fill", color ? function(d, i) {
-//        console.log(Grp[i]);
-//        console.log(color(Grp[i]));
-//        console.log(color(percentRange(d.data, d)));
-        return color(Grp[i]);
+           return color(Grp[i]);
        } : fill)
       .attr("fill-opacity", fillOpacity)
       .attr("stroke", stroke)
