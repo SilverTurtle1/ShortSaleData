@@ -132,9 +132,9 @@ def get_ssdata(startdate, enddate=0, etfs=0):
                 pricedf = pricedf.reset_index().astype(str)
                 closingprices_df = pd.DataFrame()
 
-                if end.date() >= datetime.today().date():
+                if end.date() > datetime.today().date():
                     end = end - timedelta(days=1)
-                    
+
                 if start.date() == datetime.today().date():
                     closingprices_df = pricedf
                     closingprices_df['gain'] = 0
