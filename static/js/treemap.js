@@ -10,6 +10,8 @@ var rectColor = d3.local();
 //#f44336 - bright red
 
 const percentColors = [ '#7acc33 ', '#3d8c40', '#f44336', '#7a221b ' ]
+const treemapColorRange = ["#1984c5", "#22a7f0", "#63bff0", "#a7d5ed", "#e2e2e2", "#e1a692", "#de6e56", "#e14b31", "#c23728"]
+
 
 function shadeColor(color, percent) {
           var R = parseInt(color.substring(1,3),16);
@@ -102,16 +104,17 @@ function createTreemap(data, { // data is either tabular (array of objects) or h
   const leaves = root.leaves();
 //  console.log(root)
 //  const G = group == null ? null : leaves.map(d => group(d.data, d));
-   Grp = group == null ? null : leaves.map(d => percentRange(d.data, d));
+   Grp = group == null ? null : leaves.map(d => value(d.data, d));
 
 
 
 //  if (zDomain === undefined) zDomain = Grp;
 //  zDomain = new d3.InternSet(zDomain);
   const color = group == null ? null : (
-    d3.scaleOrdinal()
-        .domain(["strong buy", "buy", "strong sell", "sell"])
-        .range(percentColors)
+    d3.scaleLinear()
+//        .domain(["strong buy", "buy", "strong sell", "sell"])
+        .domain([0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1])
+        .range(treemapColorRange)
   );
 
 
@@ -211,20 +214,20 @@ function createTreemap(data, { // data is either tabular (array of objects) or h
         .attr("x", function (d, i, D) {
           const parentData = d3.select(this.parentNode).datum();
           var ctrPos = (parentData.x1 - parentData.x0) / 2;
-          return i === D.length - 1 ? ctrPos : 3;
+          return i === D.length ? ctrPos : 3;
         })
         .attr("y", function (d, i, D) {
           const parentData = d3.select(this.parentNode).datum();
           var ctrPos = (parentData.y1 - parentData.y0) / 2;
-          if (i == D.length - 1) return ctrPos;
-          else return `${1.1 + i * 0.9}em`
+          if (i == D.length - 3) return `${1.1 + i * 0.9}em`
+          else return `${1 + 1.1 + i * 0.9}em`
         })
 //        .attr("y", (d, i, D) => `${(i === D.length - 1) * 0.3 + 1.1 + i * 0.9}em`)
 //        .attr("fill-opacity", (d, i, D) => i === D.length - 1 ? 0.7 : null)
         .attr("fill-opacity", (d, i, D) => i === D.length - 1 ? 0.7 : null)
         .text((d, i, D) => i === D.length - 2 ? parseFloat(d*100).toFixed(1)+"%" : d)
-        .attr("font-size", (d, i, D) => i === D.length - 1 ? 20: 12)
-        .style("fill", (d, i, D) => i === D.length - 1 ? "white": "white");
+        .attr("font-size", (d, i, D) => i === D.length - 3 ? 20: 12)
+        .style("fill", (d, i, D) => i === D.length - 1 ? "black": "black");
 
 
 
@@ -281,7 +284,7 @@ const renderJSONTreeMap = (jsonData) => {
                 gain: d=> d?.gain,
                 group: d => d.name.split(".")[0], // e.g., "animate" in "flare.animate.Easing"; for color
             <!--    label: (d, n) => [...d.name.split(".").pop().split(/(?=[A-Z][a-z])/g), n.value.toLocaleString("en"), d?.value].join("\n"),-->
-                label: (d, n) => [, d?.value, d?.gain, ...d.name.split(".").pop().split(/(?=[A-Z][a-z])/g)].join("\n"),
+                label: (d, n) => [...d.name.split(".").pop().split(/(?=[A-Z][a-z])/g), d?.value, d?.gain].join("\n"),
                 title: (d, n) => `${d.name}\n${d.value.toLocaleString("en")}\n${d.size.toLocaleString("en")}`, // text to show on hover
             <!--    link: (d, n) => `https://github.com/prefuse/Flare/blob/master/flare/src${n.id}.as`,-->
                 tile: d3.treemapBinary,
