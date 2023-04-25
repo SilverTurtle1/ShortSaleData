@@ -67,7 +67,12 @@ def get_ssdata(startdate, enddate=0, etfs=0):
             print(f"[!] Exception caught: {e}{file_date}")
             continue
 
-
+    if finra_df.empty:
+        print("Problem!")
+        df_empty = pd.DataFrame([['NONE','1','B','1','1','None.None','2023-04-04','1','1','1','1','1','1','1']],
+                                columns=['symbol', 'size', 'Market', 'Percentile', 'value', 'name', 'date', 'open', 'high',
+                                         'low', 'close', 'volume', 'adjclose','gain'])
+        return df_empty
     yfMaxDate = finra_df["Date"].max()
     finra_df = finra_df.groupby('Symbol').sum().reset_index()
 
@@ -130,6 +135,7 @@ def get_ssdata(startdate, enddate=0, etfs=0):
                 pricedf = tickers.history(start=start, end=end)
                 # Flatten multi index df to simplify data manipulation
                 pricedf = pricedf.reset_index().astype(str)
+                # print(pricedf)
                 closingprices_df = pd.DataFrame()
 
                 if end.date() > datetime.today().date():
@@ -140,7 +146,10 @@ def get_ssdata(startdate, enddate=0, etfs=0):
                     closingprices_df['gain'] = 0
                 else:
                     start_df = pricedf[(pricedf.date == start.strftime('%Y-%m-%d'))]
-                    end_df = pricedf[(pricedf.date == (end - timedelta(days=1)).strftime('%Y-%m-%d'))]
+                    # print(start_df)
+                    # end_df = pricedf[(pricedf.date == (end - timedelta(days=1)).strftime('%Y-%m-%d'))]
+                    end_df = pricedf[(pricedf.date == end.strftime('%Y-%m-%d'))]
+                    # print(end_df)
                     closingprices_df = pd.merge(start_df, end_df, on='symbol')
                     closingprices_df[['close_x', 'close_y']] = closingprices_df[['close_x','close_y']].astype(float)
                     closingprices_df['gain'] = ((closingprices_df['close_y']/closingprices_df['close_x'])-1)
@@ -183,6 +192,7 @@ def get_ssdata(startdate, enddate=0, etfs=0):
             file_date = prior_day.strftime("%Y%m%d")  # YYmmdd
             # Ideally we iterate backwards for start date providing most recent ... would then need to update dropdown
             continue
-
+        pd.set_option('display.max_columns', 500)
+        # print(final_df)
         return final_df.to_json(orient='records')
 

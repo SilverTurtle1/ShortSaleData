@@ -11,7 +11,7 @@ var rectColor = d3.local();
 
 const percentColors = [ '#7acc33 ', '#3d8c40', '#f44336', '#7a221b ' ]
 const treemapColorRange = ["#1984c5", "#22a7f0", "#63bff0", "#a7d5ed", "#e2e2e2", "#e1a692", "#de6e56", "#e14b31", "#c23728"]
-
+const treemapRange = [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
 
 function shadeColor(color, percent) {
           var R = parseInt(color.substring(1,3),16);
@@ -113,7 +113,7 @@ function createTreemap(data, { // data is either tabular (array of objects) or h
   const color = group == null ? null : (
     d3.scaleLinear()
 //        .domain(["strong buy", "buy", "strong sell", "sell"])
-        .domain([0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1])
+        .domain(treemapRange)
         .range(treemapColorRange)
   );
 
@@ -160,6 +160,16 @@ function createTreemap(data, { // data is either tabular (array of objects) or h
       .attr("xlink:href", link == null ? null : (d, i) => link(d.data, d))
       .attr("target", link == null ? null : linkTarget)
       .attr("transform", d => `translate(${d.x0},${d.y0})`);
+
+  // Add one dot in the legend for each name.
+//    svg.selectAll("mydots")
+//      .data(treemapRange)
+//      .enter()
+//      .append("circle")
+//        .attr("cx", 1100)
+//        .attr("cy", function(d,i){ return 100 + i*25}) // 100 is where the first dot appears. 25 is the distance between dots
+//        .attr("r", 7)
+//        .style("fill", function(d){ return color(d)})
 
   node.append("rect")
 //      .attr("fill", color ? (d, i) => color(G[i]) : fill)
@@ -288,8 +298,8 @@ const renderJSONTreeMap = (jsonData) => {
                 title: (d, n) => `${d.name}\n${d.value.toLocaleString("en")}\n${d.size.toLocaleString("en")}`, // text to show on hover
             <!--    link: (d, n) => `https://github.com/prefuse/Flare/blob/master/flare/src${n.id}.as`,-->
                 tile: d3.treemapBinary,
-                width: 1152,
-                height: 1152
+                width: 1100,
+                height: 900
            })
 //           console.log("Built JSON Treemap")
 //           console.log("JSON Treemap =")
