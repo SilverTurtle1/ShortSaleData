@@ -135,7 +135,7 @@ def get_ssdata(startdate, enddate=0, etfs=0):
                 pricedf = tickers.history(start=start, end=end)
                 # Flatten multi index df to simplify data manipulation
                 pricedf = pricedf.reset_index().astype(str)
-                # print(pricedf)
+
                 closingprices_df = pd.DataFrame()
 
                 if end.date() > datetime.today().date():

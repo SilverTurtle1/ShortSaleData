@@ -46,13 +46,13 @@ def about():
 def dataset(start_date=0, end_date=0, etfs=0):
     if start_date:
         # fetching data for selected date range from FINRA
-        treemap_json = get_ssdata(start_date, end_date, etfs)
+        return get_ssdata(start_date, end_date, etfs)
         # print("treemap json")
         # print(treemap_json)
         # df = pd.read_json(treemap_json)
         #
         # if not df.empty:
-        return treemap_json
+        # return treemap_json
         # else:
         #     return ""
         # return render_template('index.html')
