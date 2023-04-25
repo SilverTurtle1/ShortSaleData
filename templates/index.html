@@ -114,12 +114,14 @@
             });
             fetch('/dataset/'+ startDate +'/'+ endDate + '/' + values)
                 .then(function(response){
+                    // check for empty response
+                    console.log(response)
                     response.json().then(function(response){
                         renderJSONTreeMap(response);
                         var spinner = document.querySelector(".loader");
                         spinner.classList.add("loader-hidden");
                     })
-            })
+                 })
         }
 
         const funds = ["SPX","XLB","XLC","XLE","XLF","XLI","XLK","XLP","XLU","XLV","XLY", "XRT"];
@@ -216,7 +218,7 @@
                     opens: 'left',
                     ranges: {
                         'Today': [moment().startOf('day'), moment().endOf('day')],
-                        'Yesterday': [moment().subtract(1, 'days').startOf('day'), moment().subtract(1, 'days').endOf('day')],
+<!--                        'Yesterday': [moment().subtract(1, 'days').startOf('day'), moment().subtract(1, 'days').endOf('day')],-->
                         'Last 7 Days': [moment().subtract(6, 'days').startOf('day'), moment().endOf('day')],
                         'This Month': [moment().startOf('month').startOf('day'), moment().endOf('month').endOf('day')],
                     },
@@ -304,5 +306,4 @@ populateTreemap(moment().format('YYYYMMDD'),moment().format('YYYYMMDD'))
   }
 
 </style>
-
 
