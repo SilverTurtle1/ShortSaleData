@@ -103,10 +103,18 @@
 
 </div>
 
+
+
+
 <div id="checkboxes">
     <p></p>
     <script>
+        var rangeStart;
+        var rangeEnd;
+
         function populateTreemap(startDate, endDate) {
+<!--            console.log(startDate)-->
+<!--            console.log(endDate)-->
             let checkboxes = document.querySelectorAll('input[name="fund"]:checked');
             let values = [];
             checkboxes.forEach((checkbox) => {
@@ -115,7 +123,7 @@
             fetch('/dataset/'+ startDate +'/'+ endDate + '/' + values)
                 .then(function(response){
                     // check for empty response
-                    console.log(response)
+<!--                    console.log(response)-->
                     response.json().then(function(response){
                         renderJSONTreeMap(response);
                         var spinner = document.querySelector(".loader");
@@ -140,6 +148,7 @@
             checkbox.value = fund;
             checkbox.id = id;
             checkbox.checked = true;
+            if (fund == 'SPX') {checkbox.disabled = true;}
 
             // place the checkbox inside a label
             label.appendChild(checkbox);
@@ -164,6 +173,17 @@
 <!--        });-->
 <!--    </script>-->
 </div>
+
+<button id="dataBtn" onclick="loadData()">Update Fund Filters</button>
+<script>
+    function loadData() {
+        populateTreemap(rangeStart, rangeEnd);
+    }
+
+
+
+</script>
+
 <!--<script>-->
 <!--    // Get the modal-->
 <!--    var modal = document.getElementById("myModal");-->
@@ -218,7 +238,7 @@
                     opens: 'left',
                     ranges: {
                         'Today': [moment().startOf('day'), moment().endOf('day')],
-<!--                        'Yesterday': [moment().subtract(1, 'days').startOf('day'), moment().subtract(1, 'days').endOf('day')],-->
+                        'Yesterday': [moment().subtract(1, 'days').startOf('day'), moment().subtract(1, 'days').endOf('day')],
                         'Last 7 Days': [moment().subtract(6, 'days').startOf('day'), moment().endOf('day')],
                         'This Month': [moment().startOf('month').startOf('day'), moment().endOf('month').endOf('day')],
                     },
@@ -228,58 +248,21 @@
                 },
                 function (start, end) {
                     $(document).trigger("myCustomEvent");
-
-<!--                        let checkboxes = document.querySelectorAll('input[name="fund"]:checked');-->
-<!--                        let values = [];-->
-<!--                        checkboxes.forEach((checkbox) => {-->
-<!--                            values.push(checkbox.value);-->
-<!--                        });-->
-<!--                        alert(values);-->
-<!--                    alert(start.format("MM/DD/YYYY") + " - " + end.format("MM/DD/YYYY"));-->
                         daterange['start_date'] = start.format("YYYYMMDD");
                         daterange['end_date'] = end.format("YYYYMMDD");
-
+                        rangeStart = daterange['start_date']
+                        rangeEnd = daterange['end_date']
                         // update data source
 
-
-<!--                        function loadTreemap() {-->
-<!--                            return new Promise((resolve, reject) => {-->
-<!--                                populateTreemap( daterange['start_date'], daterange['end_date']);-->
-<!--                                resolve();-->
-<!--                            });-->
-<!--                        }-->
-
-<!--                        loadTreemap()-->
-<!--                            .then();-->
-
-
                         populateTreemap( daterange['start_date'], daterange['end_date']);
-<!--                                alert("Here 2")-->
 
-
-<!--                        alert("Here 3")-->
-
-
-
-
-<!--                        fetch('/dataset/'+ daterange['start_date'] +'/'+ daterange['end_date'] + '/' + values)-->
-<!--                            .then(function(response){-->
-<!--&lt;!&ndash;                                response.json().then(function(data){&ndash;&gt;-->
-<!--&lt;!&ndash;                                    if(!("error" in data)){&ndash;&gt;-->
-<!--&lt;!&ndash;                                        console.log(data);&ndash;&gt;-->
-<!--&lt;!&ndash;                                renderTreeMap("/static/data/SSData.csv");&ndash;&gt;-->
-<!--                                response.json().then(function(response){-->
-<!--                                    renderJSONTreeMap(response);-->
-<!--                                })-->
-
-<!--                        })-->
-<!--
-<!--                        modal.style.display = "block";-->
                 })
         });
 
 
 <!--renderTreeMap("/static/data/SSData.csv");-->
+rangeStart = moment().format('YYYYMMDD')
+rangeEnd = moment().format('YYYYMMDD')
 populateTreemap(moment().format('YYYYMMDD'),moment().format('YYYYMMDD'))
 
 </script>

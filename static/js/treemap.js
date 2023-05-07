@@ -126,7 +126,7 @@ function createTreemap(data, { // data is either tabular (array of objects) or h
   // Compute labels and titles.
   const L = label == null ? null : leaves.map(d => label(d.data, d));
   const T = title === undefined ? L : title == null ? null : leaves.map(d => title(d.data, d));
-  const R = gain === undefined ? L : gain == null ? null : leaves.map(d => gain(d.data, d));
+//  const R = gain === undefined ? L : gain == null ? null : leaves.map(d => gain(d.data, d));
 
 
   // Sort the leaves (typically by descending value for a pleasing layout).
@@ -200,9 +200,9 @@ function createTreemap(data, { // data is either tabular (array of objects) or h
     node.append("title").text((d, i) => T[i]);
   }
 
-  if (R) {
-    node.append("gain").text((d, i) => R[i]);
-  }
+//  if (R) {
+//    node.append("gain").text((d, i) => R[i]);
+//  }
 
   if (L) {
     // A unique identifier for clip paths (to avoid conflicts).
@@ -229,14 +229,14 @@ function createTreemap(data, { // data is either tabular (array of objects) or h
         .attr("y", function (d, i, D) {
           const parentData = d3.select(this.parentNode).datum();
           var ctrPos = (parentData.y1 - parentData.y0) / 2;
-          if (i == D.length - 3) return `${1.1 + i * 0.9}em`
+          if (i == D.length - 2) return `${1.1 + i * 0.9}em`
           else return `${1 + 1.1 + i * 0.9}em`
         })
 //        .attr("y", (d, i, D) => `${(i === D.length - 1) * 0.3 + 1.1 + i * 0.9}em`)
 //        .attr("fill-opacity", (d, i, D) => i === D.length - 1 ? 0.7 : null)
         .attr("fill-opacity", (d, i, D) => i === D.length - 1 ? 0.7 : null)
-        .text((d, i, D) => i === D.length - 2 ? parseFloat(d*100).toFixed(1)+"%" : d)
-        .attr("font-size", (d, i, D) => i === D.length - 3 ? 20: 12)
+        .text((d, i, D) => i === D.length - 1 ? parseFloat(d*100).toFixed(0)+"%" : d)
+        .attr("font-size", (d, i, D) => i === D.length - 2 ? 16: 12)
         .style("fill", (d, i, D) => i === D.length - 1 ? "black": "black");
 
 
@@ -255,7 +255,7 @@ const renderTreeMap = (filepath) => {
     d3.csv(filepath)
         .then(function(data) {
     //       console.log("Loading CSV via D3 sending data to Treemap function")
-           console.log(data)
+//           console.log(data)
             treemap = createTreemap(data, {
                 path: d => d.name.replace(/\./g, "/"), // e.g., "flare/animate/Easing
                 size: d => d?.size, // size of each node (file); null for internal nodes (folders)
@@ -282,7 +282,7 @@ const renderTreeMap = (filepath) => {
 
 const renderJSONTreeMap = (jsonData) => {
 //    console.log("In JSON Treemap")
-       console.log(jsonData)
+//       console.log(jsonData)
     oldtreemap = document.getElementById("svg_container").childNodes[0]
 //    d3.json(jsonData)
 //        .then(function(data) {
@@ -294,8 +294,8 @@ const renderJSONTreeMap = (jsonData) => {
                 gain: d=> d?.gain,
                 group: d => d.name.split(".")[0], // e.g., "animate" in "flare.animate.Easing"; for color
             <!--    label: (d, n) => [...d.name.split(".").pop().split(/(?=[A-Z][a-z])/g), n.value.toLocaleString("en"), d?.value].join("\n"),-->
-                label: (d, n) => [...d.name.split(".").pop().split(/(?=[A-Z][a-z])/g), d?.value, d?.gain].join("\n"),
-                title: (d, n) => `${d.name}\n${d.value.toLocaleString("en")}\n${d.size.toLocaleString("en")}`, // text to show on hover
+                label: (d, n) => [...d.name.split(".").pop().split(/(?=[A-Z][a-z])/g), d?.value].join("\n"),
+                title: (d, n) => `ETF: ${d.name.split(".")[0]}\n% Short: ${parseFloat(d.value.toLocaleString("en")*100).toFixed(0)+"%"}\nVolume: ${d.size.toLocaleString("en")}\n% Return: ${parseFloat(d.gain*100).toFixed(1)+"%"}`, // text to show on hover
             <!--    link: (d, n) => `https://github.com/prefuse/Flare/blob/master/flare/src${n.id}.as`,-->
                 tile: d3.treemapBinary,
                 width: 1100,

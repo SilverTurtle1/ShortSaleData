@@ -1,11 +1,15 @@
 import pandas as pd
-from flask import Flask, render_template, request, redirect, jsonify, make_response
+from flask import Flask, render_template, request, redirect, jsonify, make_response, session
+from flask_session import Session
 import json
 import csv
 from finra import get_ssdata
 
 # Initiate Flask Application
 app = Flask(__name__)
+app.config["SESSION_PERMANENT"] = False
+app.config["SESSION_TYPE"] = "filesystem"
+Session(app)
 
 # Import DataFrame
 # PATH_IN = r'static\data\miserables.json'
@@ -45,8 +49,52 @@ def about():
 @app.route('/dataset/<start_date>/<end_date>/<etfs>')
 def dataset(start_date=0, end_date=0, etfs=0):
     if start_date:
-        # fetching data for selected date range from FINRA
-        return get_ssdata(start_date, end_date, etfs)
+        finra_df = pd.DataFrame()
+        if not session.get("data"):
+            # fetching data for selected date range from FINRA
+            session['startdate'] = start_date
+            session['enddate'] = end_date
+            finra_df = get_ssdata(start_date, end_date, etfs)
+            session['data'] = finra_df
+
+            # print("Get Dataset - No Data Stored")
+        else:
+            # print("Determining if date range has changed", session['startdate'], session['enddate'], start_date, end_date)
+            if session['startdate'] == start_date and session['enddate'] == end_date:
+                finra_df = session['data']
+                # print("Loading Dataset - Same Date Range")
+            # if not session.get("funds"):
+            #     finra_df = get_ssdata(start_date, end_date, etfs)
+            #     session['data'] = finra_df
+            # else:
+            #     finra_df = session['data']
+            #     if not session['funds'] == etfs:
+            #         temp_df = pd.read_json(finra_df)
+            #         temp_df = temp_df[temp_df["Fund"].isin(list(etfs.split(",")))]
+            #         # print(temp_df)
+            #         finra_df = temp_df.to_json(orient='records')
+            #         print('Filtered DF on Funds')
+
+            # else:
+            else:
+                session['startdate'] = start_date
+                session['enddate'] = end_date
+                finra_df = get_ssdata(start_date, end_date, etfs)
+                session['data'] = finra_df
+
+                # print("Get Dataset - Date Range Change")
+        temp_df = pd.read_json(finra_df)
+        temp_df = temp_df[temp_df["Fund"].isin(list(etfs.split(",")))]
+        # print(temp_df)
+        finra_df = temp_df.to_json(orient='records')
+        # print('Saving Start Date ', session['startdate'])
+        # print('Saving End Date ', session['enddate'])
+
+
+
+
+
+        return finra_df
         # print("treemap json")
         # print(treemap_json)
         # df = pd.read_json(treemap_json)
