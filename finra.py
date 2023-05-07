@@ -69,7 +69,7 @@ def get_ssdata(startdate, enddate=0, etfs=0):
             except requests.HTTPError as e:
                 print(f"[!] Exception caught: {e}{file_date}")
                 if numDays == 0:
-                    prior_day = datetime.strptime(input_date, '%Y%m%d') - timedelta(days=1)
+                    prior_day = datetime.strptime(temp_start, '%Y%m%d') - timedelta(days=1)
                     temp_start = prior_day.strftime('%Y%m%d')
                     finra_file = finra_dir + f'{temp_start}.txt'
                 continue
