@@ -15,7 +15,7 @@ from markupsafe import escape
 finra_dir = r'https://cdn.finra.org/equity/regsho/daily/CNMSshvol'
 data_dir = r'static/data/'
 mapping_file = 'etfMapping-backup.csv'
-min_volume = 5000000
+min_volume = 5000000 #5M shares traded daily min
 
 
 def get_csv(url):
@@ -41,6 +41,8 @@ def index_level_dtypes(df):
 def get_ssdata(startdate, enddate=0, etfs=0):
 
     file_date = re.sub("\/", "", startdate)
+    input_date = startdate
+    temp_start = startdate
     finra_df = pd.DataFrame()
 
     values = range(0)
@@ -50,32 +52,38 @@ def get_ssdata(startdate, enddate=0, etfs=0):
     else:
         numDays = 0
     etfOnly = True
+    # print(numDays)
+    while True:
+        for i in values:
+            cur_day = datetime.strptime(temp_start, '%Y%m%d') + timedelta(days=i)
+            file_date = cur_day.strftime('%Y%m%d')
+            finra_file = finra_dir + f'{file_date}.txt'
+            try:
+                ssdata_temp = get_csv(finra_file)
+                temp_df = ssdata_temp[(ssdata_temp.TotalVolume > min_volume)]
+                if finra_df.empty:
+                    finra_df = temp_df.copy()
+                else:
+                    finra_df = pd.concat([finra_df, temp_df.copy()], axis=0)
+                temp_start = input_date
+            except requests.HTTPError as e:
+                print(f"[!] Exception caught: {e}{file_date}")
+                if numDays == 0:
+                    prior_day = datetime.strptime(input_date, '%Y%m%d') - timedelta(days=1)
+                    temp_start = prior_day.strftime('%Y%m%d')
+                    finra_file = finra_dir + f'{temp_start}.txt'
+                continue
 
-    for i in values:
-        cur_day = datetime.strptime(startdate, '%Y%m%d') + timedelta(days=i)
-        file_date = cur_day.strftime('%Y%m%d')
-        finra_file = finra_dir + f'{file_date}.txt'
-        try:
-            ssdata_temp = get_csv(finra_file)
-            temp_df = ssdata_temp[(ssdata_temp.TotalVolume > min_volume)]
-            if finra_df.empty:
-                finra_df = temp_df.copy()
-            else:
-                finra_df = pd.concat([finra_df, temp_df.copy()], axis=0)
+        if temp_start == input_date:
+            break
 
-        except requests.HTTPError as e:
-            print(f"[!] Exception caught: {e}{file_date}")
-            continue
+
 
     if finra_df.empty:
         print("Problem!")
-        df_empty = pd.DataFrame([['NONE','1','B','1','1','None.None','2023-04-04','1','1','1','1','1','1','1']],
-                                columns=['symbol', 'size', 'Market', 'Percentile', 'value', 'name', 'date', 'open', 'high',
-                                         'low', 'close', 'volume', 'adjclose','gain'])
-        return df_empty
+        return pd.DataFrame()
     yfMaxDate = finra_df["Date"].max()
     finra_df = finra_df.groupby('Symbol').sum().reset_index()
-
 
     while True:
         try:
@@ -98,8 +106,10 @@ def get_ssdata(startdate, enddate=0, etfs=0):
                 etf_df = pd.read_csv(os.path.join(src_dir, data_dir, mapping_file))
                 # print("Mapping File Pre Filter")
                 # print(etfs)
+                funds = ["SPX", "XLB", "XLC", "XLE", "XLF", "XLI", "XLK", "XLP", "XLU", "XLV", "XLY", "XRT"];
                 if etfs != 0:
-                    etf_df = etf_df[etf_df["Fund"].isin(list(etfs.split(",")))]
+                    # etf_df = etf_df[etf_df["Fund"].isin(list(funds.split(",")))]
+                    etf_df = etf_df[etf_df["Fund"].isin(funds)]
                     # print("Mapping File Post Filter")
                     # print(etf_df)
 
@@ -125,17 +135,18 @@ def get_ssdata(startdate, enddate=0, etfs=0):
                 # end = datetime.strptime(enddate, '%Y%m%d')
 
                 # Set YFinance end date to the min of FINRA end date and current date - 1. Don't want to deal with Yahoo formatting for current date
-                print(yfMaxDate)
+                # print(yfMaxDate)
                 end = min([datetime.strptime(str(yfMaxDate), '%Y%m%d') + timedelta(days=1), datetime.today() + timedelta(days=1)])
                 if start == end:
                     print("Start = End")
-                print("Start Date: ", start)
-                print("End Date: ", end)
+                # print("Start Date: ", start)
+                # print("End Date: ", end)
 
                 pricedf = tickers.history(start=start, end=end)
                 # Flatten multi index df to simplify data manipulation
                 pricedf = pricedf.reset_index().astype(str)
-
+                # print(pricedf)
+                # print("End of price df")
                 closingprices_df = pd.DataFrame()
 
                 if end.date() > datetime.today().date():
@@ -148,21 +159,30 @@ def get_ssdata(startdate, enddate=0, etfs=0):
                     start_df = pricedf[(pricedf.date == start.strftime('%Y-%m-%d'))]
                     # print(start_df)
                     # end_df = pricedf[(pricedf.date == (end - timedelta(days=1)).strftime('%Y-%m-%d'))]
-                    end_df = pricedf[(pricedf.date == end.strftime('%Y-%m-%d'))]
+                    end_df = pricedf[(pricedf.date == (end - timedelta(days=1)).strftime('%Y-%m-%d'))]
+                    # print("End DF")
                     # print(end_df)
-                    closingprices_df = pd.merge(start_df, end_df, on='symbol')
-                    closingprices_df[['close_x', 'close_y']] = closingprices_df[['close_x','close_y']].astype(float)
-                    closingprices_df['gain'] = ((closingprices_df['close_y']/closingprices_df['close_x'])-1)
-                    closingprices_df.drop(columns=["close_x", "close_y"], inplace=True)
+                    closingprices_df = start_df
+                    if not end_df.empty:
+                        # print("End DF not empty")
+                        closingprices_df = pd.merge(start_df, end_df, on='symbol')
+                        closingprices_df[['close_x', 'close_y']] = closingprices_df[['close_x','close_y']].astype(float)
+                        closingprices_df['gain'] = ((closingprices_df['close_y']/closingprices_df['close_x'])-1)
+                        closingprices_df.drop(columns=["close_x", "close_y"], inplace=True)
+                    else:
+                        closingprices_df['gain'] = 0
+                        closingprices_df.drop(columns=["close"], inplace=True)
 
                 mapped_df.drop(
-                    columns=["Date", "ShortVolume", "ShortExemptVolume", "Name", "% Holding", "Fund"], inplace=True)
+                    columns=["Date", "ShortVolume", "ShortExemptVolume", "Name", "% Holding"], inplace=True)
                 decimals = 2
                 mapped_df['Short%'] = mapped_df['Short%'].apply(lambda x: round(x, decimals))
                 closingprices_df['gain'] = closingprices_df['gain'].apply(lambda x: round(x, decimals))
                 mapped_df.rename(columns={'Short%': 'value', 'TotalVolume': 'size', 'Symbol': 'symbol'}, inplace=True)
                 mapped_df = mapped_df[mapped_df.name != '']
                 final_df = pd.merge(mapped_df, closingprices_df, on='symbol')
+                # print("Right Here 2")
+                # print(final_df)
 
             else:
                 finra_df["Short%"] = finra_df["ShortVolume"] / finra_df["TotalVolume"]
