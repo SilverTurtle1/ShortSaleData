@@ -44,6 +44,7 @@ def get_ssdata(startdate, enddate=0, etfs=0):
     input_date = startdate
     temp_start = startdate
     finra_df = pd.DataFrame()
+    detail_df = pd.DataFrame()
 
     values = range(0)
     if enddate != 0:
@@ -83,7 +84,14 @@ def get_ssdata(startdate, enddate=0, etfs=0):
         print("Problem!")
         return pd.DataFrame()
     yfMaxDate = finra_df["Date"].max()
+    # Master df with daily totals that will be used for detailed breakdown
+    detail_df = finra_df.copy()
+
+    detail_df.drop(columns=["ShortExemptVolume", "Market"], inplace=True)
+
+    print(detail_df)
     finra_df = finra_df.groupby('Symbol').sum().reset_index()
+
 
     while True:
         try:
@@ -96,6 +104,7 @@ def get_ssdata(startdate, enddate=0, etfs=0):
             # finra_df = ssdata_temp[(ssdata_temp.TotalVolume > min_volume)]
 
             finra_df['Percentile'] = finra_df.TotalVolume.rank(pct = True)
+
             # finra_df = finra_df[(finra_df.Percentile > 0.5)]
             src_dir = os.path.dirname(os.path.abspath(__file__))
             final_df = pd.DataFrame()
@@ -213,6 +222,5 @@ def get_ssdata(startdate, enddate=0, etfs=0):
             # Ideally we iterate backwards for start date providing most recent ... would then need to update dropdown
             continue
         pd.set_option('display.max_columns', 500)
-        # print(final_df)
-        return final_df.to_json(orient='records')
+        return [final_df.to_json(orient='records'), detail_df.to_json(orient='records')]
 

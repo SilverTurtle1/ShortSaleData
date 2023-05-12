@@ -4,6 +4,7 @@ from flask_session import Session
 import json
 import csv
 from finra import get_ssdata
+from datetime import datetime
 
 # Initiate Flask Application
 app = Flask(__name__)
@@ -40,74 +41,51 @@ def index():
     # get_ssdata("20230404", "20230404")
     return render_template('index.html')
 
-@app.route('/about')
-def about():
-    # get_ssdata("20230404", "20230404")
-    return render_template('about.html')
 
-
-@app.route('/dataset/<start_date>/<end_date>/<etfs>')
-def dataset(start_date=0, end_date=0, etfs=0):
+@app.route('/treemap/<start_date>/<end_date>/<etfs>')
+def treemap(start_date=0, end_date=0, etfs=0):
+    finraList =[]
     if start_date:
         finra_df = pd.DataFrame()
+        finra_detail = pd.DataFrame()
         if not session.get("data"):
             # fetching data for selected date range from FINRA
             session['startdate'] = start_date
             session['enddate'] = end_date
-            finra_df = get_ssdata(start_date, end_date, etfs)
+            finraList = get_ssdata(start_date, end_date, etfs)
+            finra_df = finraList[0]
+            finra_detail = finraList[1]
             session['data'] = finra_df
-
-            # print("Get Dataset - No Data Stored")
+            session['dataDetail'] = finra_detail
         else:
-            # print("Determining if date range has changed", session['startdate'], session['enddate'], start_date, end_date)
             if session['startdate'] == start_date and session['enddate'] == end_date:
                 finra_df = session['data']
-                # print("Loading Dataset - Same Date Range")
-            # if not session.get("funds"):
-            #     finra_df = get_ssdata(start_date, end_date, etfs)
-            #     session['data'] = finra_df
-            # else:
-            #     finra_df = session['data']
-            #     if not session['funds'] == etfs:
-            #         temp_df = pd.read_json(finra_df)
-            #         temp_df = temp_df[temp_df["Fund"].isin(list(etfs.split(",")))]
-            #         # print(temp_df)
-            #         finra_df = temp_df.to_json(orient='records')
-            #         print('Filtered DF on Funds')
-
-            # else:
             else:
                 session['startdate'] = start_date
                 session['enddate'] = end_date
-                finra_df = get_ssdata(start_date, end_date, etfs)
+                finraList = get_ssdata(start_date, end_date, etfs)
+                finra_df = finraList[0]
+                finra_detail = finraList[1]
                 session['data'] = finra_df
-
-                # print("Get Dataset - Date Range Change")
+                session['dataDetail'] = finra_detail
         temp_df = pd.read_json(finra_df)
         temp_df = temp_df[temp_df["Fund"].isin(list(etfs.split(",")))]
-        # print(temp_df)
         finra_df = temp_df.to_json(orient='records')
-        # print('Saving Start Date ', session['startdate'])
-        # print('Saving End Date ', session['enddate'])
-
-
-
-
-
+        finraList = [finra_df, finra_detail]
         return finra_df
-        # print("treemap json")
-        # print(treemap_json)
-        # df = pd.read_json(treemap_json)
-        #
-        # if not df.empty:
-        # return treemap_json
-        # else:
-        #     return ""
-        # return render_template('index.html')
-        # return jsonify({"success": "Data loaded for "+ start_date})
+
     else:
         return jsonify({"error": "Could not load data for " + start_date})
 
+@app.route('/barchart/<symbol>')
+def barchart(symbol):
+    finra_detail = session['dataDetail']
+    temp_df = pd.read_json(finra_detail)
+    temp_df = temp_df.loc[temp_df['Symbol'] == symbol]
+    temp_df["Date"] = pd.to_datetime(temp_df["Date"],format='%Y%m%d').dt.strftime('%m-%d-%Y')
+    temp_df['Date'] = temp_df['Date'].astype(str)
+    finra_detail = temp_df.to_json(orient='records')
+    return finra_detail
 
 @app.route('/get-json', methods=['GET', 'POST'])
 def get_json():
