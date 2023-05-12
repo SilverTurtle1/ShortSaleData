@@ -4,6 +4,7 @@
 var treemap
 var Grp
 var rectColor = d3.local();
+
 //#7acc33 - bright green
 //#3d8c40 - dull green
 //#7a221b - dull red
@@ -40,6 +41,7 @@ function createTreemap(data, { // data is either tabular (array of objects) or h
   children, // if hierarchical data, given a d in data, returns its children
   size, // given a node d, returns a quantitative value (for area encoding; null for count)
   value, // given a node d, returns a quantitative value attribute (for area encoding; null for count)
+  symbol,
   gain, // percent gain through selected time period
   sort = (a, b) => d3.descending(a.value, b.value), // how to sort nodes prior to layout
   label, // given a leaf node d, returns the name to display on the rectangle
@@ -126,7 +128,8 @@ function createTreemap(data, { // data is either tabular (array of objects) or h
   // Compute labels and titles.
   const L = label == null ? null : leaves.map(d => label(d.data, d));
   const T = title === undefined ? L : title == null ? null : leaves.map(d => title(d.data, d));
-//  const R = gain === undefined ? L : gain == null ? null : leaves.map(d => gain(d.data, d));
+
+  const S = symbol === undefined ? S : symbol == null ? null : leaves.map(d => symbol(d.data, d));
 
 
   // Sort the leaves (typically by descending value for a pleasing layout).
@@ -171,11 +174,19 @@ function createTreemap(data, { // data is either tabular (array of objects) or h
 //        .attr("r", 7)
 //        .style("fill", function(d){ return color(d)})
 
+
+  if (S) {
+    node.append("symbol").text((d, i) => S[i]);
+  }
+
   node.append("rect")
 //      .attr("fill", color ? (d, i) => color(G[i]) : fill)
       .attr("fill", color ? function(d, i) {
            return color(Grp[i]);
        } : fill)
+       .attr("symbol", function(d, i) {
+           return S[i];
+       })
       .attr("fill-opacity", fillOpacity)
       .attr("stroke", stroke)
       .attr("stroke-width", strokeWidth)
@@ -190,7 +201,12 @@ function createTreemap(data, { // data is either tabular (array of objects) or h
        .on("mouseout", function(d, i) {
         var oldColor = rectColor.get(this)
         d3.select(this).attr("fill", oldColor);
+       })
+       .on("click", function(d, i) {
+        loadModal()
+        populateBarChart(d3.select(this).attr("symbol"));
        });
+
 //       .each(function(d) { previousData.set(this, d) });
 
 
@@ -200,19 +216,19 @@ function createTreemap(data, { // data is either tabular (array of objects) or h
     node.append("title").text((d, i) => T[i]);
   }
 
-//  if (R) {
-//    node.append("gain").text((d, i) => R[i]);
-//  }
+
+
+
 
   if (L) {
     // A unique identifier for clip paths (to avoid conflicts).
     const uid = `O-${Math.random().toString(16).slice(2)}`;
 
     node.append("clipPath")
-       .attr("id", (d, i) => `${uid}-clip-${i}`)
-     .append("rect")
-       .attr("width", d => d.x1 - d.x0)
-       .attr("height", d => d.y1 - d.y0);
+        .attr("id", (d, i) => `${uid}-clip-${i}`)
+        .append("rect")
+        .attr("width", d => d.x1 - d.x0)
+        .attr("height", d => d.y1 - d.y0);
 
     node.append("text")
 
@@ -238,75 +254,31 @@ function createTreemap(data, { // data is either tabular (array of objects) or h
         .text((d, i, D) => i === D.length - 1 ? parseFloat(d*100).toFixed(0)+"%" : d)
         .attr("font-size", (d, i, D) => i === D.length - 2 ? 16: 12)
         .style("fill", (d, i, D) => i === D.length - 1 ? "black": "black");
-
-
-
-
   }
-
   return Object.assign(svg.node(), {scales: {color}});
-}
-
-const renderTreeMap = (filepath) => {
-    console.log("index.html JS Begin")
-    oldtreemap = document.getElementById("svg_container").childNodes[0]
-    console.log("Before createTreemap, treemap = " + oldtreemap)
-
-    d3.csv(filepath)
-        .then(function(data) {
-    //       console.log("Loading CSV via D3 sending data to Treemap function")
-//           console.log(data)
-            treemap = createTreemap(data, {
-                path: d => d.name.replace(/\./g, "/"), // e.g., "flare/animate/Easing
-                size: d => d?.size, // size of each node (file); null for internal nodes (folders)
-                value: d => d?.value, // value attribute of each node (file); null for internal nodes (folders)
-                group: d => d.name.split(".")[0], // e.g., "animate" in "flare.animate.Easing"; for color
-            <!--    label: (d, n) => [...d.name.split(".").pop().split(/(?=[A-Z][a-z])/g), n.value.toLocaleString("en"), d?.value].join("\n"),-->
-                label: (d, n) => [...d.name.split(".").pop().split(/(?=[A-Z][a-z])/g), d?.value].join("\n"),
-                title: (d, n) => `${d.name}\n${n.value.toLocaleString("en")}`, // text to show on hover
-            <!--    link: (d, n) => `https://github.com/prefuse/Flare/blob/master/flare/src${n.id}.as`,-->
-                tile: d3.treemapBinary,
-                width: 1152,
-                height: 1152
-           })
-           console.log("Built Treemap")
-           console.log("Treemap =")
-           console.log(treemap)
-           if (typeof oldtreemap === 'undefined') document.getElementById("svg_container").appendChild(treemap);
-           else document.getElementById("svg_container").replaceChild(treemap, oldtreemap);
-
-//           document.getElementById("svg_container").appendChild(treemap);
-    });
 }
 
 
 const renderJSONTreeMap = (jsonData) => {
-//    console.log("In JSON Treemap")
-//       console.log(jsonData)
     oldtreemap = document.getElementById("svg_container").childNodes[0]
-//    d3.json(jsonData)
-//        .then(function(data) {
-//           console.log(data)
-            treemap = createTreemap(jsonData, {
-                path: d => d.name.replace(/\./g, "/"),
-                size: d => d?.size, // size of each node (file); null for internal nodes (folders)
-                value: d => d?.value, // value attribute of each node (file); null for internal nodes (folders)
-                gain: d=> d?.gain,
-                group: d => d.name.split(".")[0], // e.g., "animate" in "flare.animate.Easing"; for color
-            <!--    label: (d, n) => [...d.name.split(".").pop().split(/(?=[A-Z][a-z])/g), n.value.toLocaleString("en"), d?.value].join("\n"),-->
-                label: (d, n) => [...d.name.split(".").pop().split(/(?=[A-Z][a-z])/g), d?.value].join("\n"),
-                title: (d, n) => `ETF: ${d.name.split(".")[0]}\n% Short: ${parseFloat(d.value.toLocaleString("en")*100).toFixed(0)+"%"}\nVolume: ${d.size.toLocaleString("en")}\n% Return: ${parseFloat(d.gain*100).toFixed(1)+"%"}`, // text to show on hover
-            <!--    link: (d, n) => `https://github.com/prefuse/Flare/blob/master/flare/src${n.id}.as`,-->
-                tile: d3.treemapBinary,
-                width: 1100,
-                height: 900
-           })
-//           console.log("Built JSON Treemap")
-//           console.log("JSON Treemap =")
-//           console.log(treemap)
-           if (typeof oldtreemap === 'undefined') document.getElementById("svg_container").appendChild(treemap);
-           else document.getElementById("svg_container").replaceChild(treemap, oldtreemap);
+    var treemapData = jsonData[0]
 
-//           document.getElementById("svg_container").appendChild(treemap);
-//    });
+    treemap = createTreemap(jsonData, {
+        path: d => d.name.replace(/\./g, "/"),
+        size: d => d?.size, // size of each node (file); null for internal nodes (folders)
+        value: d => d?.value, // value attribute of each node (file); null for internal nodes (folders)
+        symbol: d => d?.symbol,
+        gain: d=> d?.gain,
+        group: d => d.name.split(".")[0], // e.g., "animate" in "flare.animate.Easing"; for color
+    <!--    label: (d, n) => [...d.name.split(".").pop().split(/(?=[A-Z][a-z])/g), n.value.toLocaleString("en"), d?.value].join("\n"),-->
+        label: (d, n) => [...d.name.split(".").pop().split(/(?=[A-Z][a-z])/g), d?.value].join("\n"),
+        title: (d, n) => `ETF: ${d.name.split(".")[0]}\n% Short: ${parseFloat(d.value.toLocaleString("en")*100).toFixed(0)+"%"}\nVolume: ${d.size.toLocaleString("en")}\n% Return: ${parseFloat(d.gain*100).toFixed(1)+"%"}`, // text to show on hover
+    <!--    link: (d, n) => `https://github.com/prefuse/Flare/blob/master/flare/src${n.id}.as`,-->
+        tile: d3.treemapBinary,
+        width: 1100,
+        height: 900
+   })
+   if (typeof oldtreemap === 'undefined') document.getElementById("svg_container").appendChild(treemap);
+   else document.getElementById("svg_container").replaceChild(treemap, oldtreemap);
+
 }
