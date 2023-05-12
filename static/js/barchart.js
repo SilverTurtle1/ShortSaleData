@@ -81,10 +81,20 @@ svg.append("g")
     .append("rect")
     .attr("x", x(0) )
     .attr("y", function(d) { return y(d.Date); })
-    .attr("width", function(d) { return x(d.TotalVolume); })
+//    .attr("width", function(d) { return x(d.TotalVolume); })
+    .attr("width", function(d) { return x(0); })
     .attr("height", Math.min(y.bandwidth(), 40) )
     .attr("fill", "#69b3a2")
     .attr("transform", "translate(70,0)")
+
+    // Animation
+    svg.selectAll("rect")
+      .transition()
+      .duration(800)
+      .attr("x", function(d) { return y(d.Value); })
+      .attr("width", function(d) { return x(d.TotalVolume); })
+      .delay(function(d,i){return(i*100)})
+
 
 
     // .attr("x", function(d) { return x(d.Country); })
