@@ -86,12 +86,9 @@ def get_ssdata(startdate, enddate=0, etfs=0):
     yfMaxDate = finra_df["Date"].max()
     # Master df with daily totals that will be used for detailed breakdown
     detail_df = finra_df.copy()
-
+    detail_df["LongVolume"] = detail_df["TotalVolume"] - detail_df["ShortVolume"]
     detail_df.drop(columns=["ShortExemptVolume", "Market"], inplace=True)
-
-    print(detail_df)
     finra_df = finra_df.groupby('Symbol').sum().reset_index()
-
 
     while True:
         try:
