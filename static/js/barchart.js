@@ -1,30 +1,12 @@
 
 
-// Parse the Data
-//function createBarchart(data, {
 
-//d3.csv("https://raw.githubusercontent.com/holtzy/data_to_viz/master/Example_dataset/7_OneCatOneNum_header.csv").then(function(data) {
 
 function createBarChart(data) {
 
-    // format the data
-//  console.log(data)
-//  data.forEach(function(d) {
-//    d.value = +d.value;
-//  });
-
-//const svg = d3.create("svg")
-//      .attr("viewBox", [-marginLeft, -marginTop, width, height])
-//      .attr("width", width)
-//      .attr("height", height)
-//      .attr("style", "max-width: 100%; height: auto; height: intrinsic;")
-//      .attr("font-family", "work sans")
-//      .attr("font-size", 12)
-//      .attr("font-weight", "light")
-//      .attr("fill", "white");
 
 // set the dimensions and margins of the graph
-var margin = {top: 20, right: 30, bottom: 40, left: 90},
+var margin = {top: 20, right: 30, bottom: 100, left: 90},
     width = 800 - margin.left - margin.right,
     height = 400 - margin.top - margin.bottom;
 
@@ -37,15 +19,21 @@ svg.append("g")
     .attr("transform",
           "translate(" + margin.left + "," + margin.top + ")");
 
+ const volgroups = ["ShortVolume", "LongVolume"]
+ const dates = data.map(d => (d.Date))
+
 
   // Add X axis
   var x = d3.scaleLinear()
     .domain([0, d3.max(data, function(d) { return d.TotalVolume; })])
     .range([ 0, width]);
 
+    var x_axis = d3.axisBottom(x)
+        .tickFormat(x => `${(x/1000000).toFixed(1)}M`);
+
   svg.append("g")
-    .attr("transform", "translate(0," + height + ")")
-    .call(d3.axisBottom(x))
+    .attr("transform", "translate(70," + height + ")")
+    .call(x_axis)
     .selectAll("text")
       .attr("transform", "translate(-10,0)rotate(-45)")
       .style("text-anchor", "end");
@@ -53,11 +41,10 @@ svg.append("g")
   // Y axis
   var y = d3.scaleBand()
     .range([ 0, height ])
-    .domain(data.map(function(d) { return d.Date; }))
-    .padding(.1);
+    .domain(dates)
+    .padding(.02);
 
   svg.append("g")
-//    .call(d3.axisLeft(y))
     .attr("transform", "translate(70,0)")//magic number, change it at will
     .call(d3.axisLeft(y))
 
@@ -68,40 +55,47 @@ svg.append("g")
 //   .style("font-size", "16px")
 //   .text("Awesome Barchart");
 
+  const color = d3.scaleOrdinal()
+    .domain(volgroups)
+    .range(['#377eb8', '#69b3a2'])
 
-// // Scale the range of the data in the domains
-//  x.domain(data.map(function(d) { return d.Country; }));
-//  y.domain([0, d3.max(data, function(d) { return d.value; })]);
+  const stackedData = d3.stack()
+    .keys(volgroups)
+    (data)
 
 
-  //Bars
-  svg.selectAll("myRect")
-    .data(data)
-    .enter()
-    .append("rect")
-    .attr("x", x(0) )
-    .attr("y", function(d) { return y(d.Date); })
-//    .attr("width", function(d) { return x(d.TotalVolume); })
-    .attr("width", function(d) { return x(0); })
-    .attr("height", Math.min(y.bandwidth(), 40) )
-    .attr("fill", "#69b3a2")
-    .attr("transform", "translate(70,0)")
+ svg.append("g")
+    .selectAll("g")
+    .data(stackedData)
+    .join("g")
+        .attr("fill", d => color(d.key))
+        .selectAll("rect")
+        .data(d => d)
+        .join("rect")
+            .attr("y", d => y(d.data.Date))
+            .attr("height", Math.min(y.bandwidth(), 40) )
+            .attr("transform", "translate(70,0)")
+            .attr("x", x(0) )
+            .attr("width", function(d) { return x(0); })
 
     // Animation
     svg.selectAll("rect")
       .transition()
       .duration(800)
-      .attr("x", function(d) { return y(d.Value); })
-      .attr("width", function(d) { return x(d.TotalVolume); })
+      .attr("x", d => x(d[0]) )
+      .attr("width", function(d) { return x(d[1]) - x(d[0]); })
       .delay(function(d,i){return(i*100)})
 
+    var legend = d3.legendColor()
+        .shape("path", d3.symbol().type(d3.symbolTriangle).size(100)())
+        .shapePadding(20)
+        .scale(color)
+//        .orient("horizontal");
+    svg.append("g")
+        .attr("transform", "translate(70, 350)")
+        .attr("class", "legendOrdinal")
+        .call(legend);
 
-
-    // .attr("x", function(d) { return x(d.Country); })
-    // .attr("y", function(d) { return y(d.Value); })
-    // .attr("width", x.bandwidth())
-    // .attr("height", function(d) { return height - y(d.Value); })
-    // .attr("fill", "#69b3a2")
     return Object.assign(svg.node());
 
 }
