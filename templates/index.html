@@ -136,8 +136,11 @@
                 checkbox.name = "fund";
                 checkbox.value = fund;
                 checkbox.id = id;
-                checkbox.checked = true;
-                if (fund == 'SPX') {checkbox.disabled = true;}
+                checkbox.checked = false;
+                if (fund == 'SPX') {
+                    checkbox.checked = true;
+                    checkbox.disabled = true;
+                }
 
                 // place the checkbox inside a label
                 label.appendChild(checkbox);
@@ -259,10 +262,9 @@
         });
 
 
-<!--renderTreeMap("/static/data/SSData.csv");-->
-rangeStart = moment().format('YYYYMMDD')
-rangeEnd = moment().format('YYYYMMDD')
-populateTreemap(moment().format('YYYYMMDD'),moment().format('YYYYMMDD'))
+rangeStart = moment().subtract(6, 'days').startOf('day').format('YYYYMMDD')
+rangeEnd = moment().endOf('day').format('YYYYMMDD')
+populateTreemap(rangeStart, rangeEnd)
 
 </script>
 </html>

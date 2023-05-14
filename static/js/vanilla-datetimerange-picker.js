@@ -20,7 +20,9 @@ var DateRangePicker;
             this.element = document.getElementById(element);
         else
             this.element = element;
-        this.startDate = moment().startOf('day');
+//        this.startDate = moment().startOf('day');
+//        this.endDate = moment().endOf('day');
+        this.startDate = moment().subtract(6, 'days').startOf('day');
         this.endDate = moment().endOf('day');
         this.minDate = false;
         this.maxDate = false;
