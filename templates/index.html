@@ -94,8 +94,6 @@
             var rangeEnd;
 
             function populateTreemap(startDate, endDate) {
-    <!--            console.log(startDate)-->
-    <!--            console.log(endDate)-->
                 let checkboxes = document.querySelectorAll('input[name="fund"]:checked');
                 let values = [];
                 checkboxes.forEach((checkbox) => {
@@ -260,7 +258,6 @@
 
                 })
         });
-
 
 rangeStart = moment().subtract(6, 'days').startOf('day').format('YYYYMMDD')
 rangeEnd = moment().endOf('day').format('YYYYMMDD')
