@@ -1,10 +1,11 @@
-import pandas as pd
-from flask import Flask, render_template, request, redirect, jsonify, make_response, session
-from flask_session import Session
-import json
 import csv
+import json
+
+import pandas as pd
+from flask import Flask, render_template, jsonify, session
+
 from finra import get_ssdata
-from datetime import datetime
+from flask_session import Session
 
 # Initiate Flask Application
 app = Flask(__name__)
