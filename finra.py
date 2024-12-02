@@ -45,7 +45,7 @@ def get_engine(user, passwd, host, port, db):
     if not database_exists(url):
         create_database(url)
     engine = create_engine(
-        "postgresql://pguser:zmfLzC3hqRf43N5abIpIbdkmllswE9Hj@dpg-ct6h009u0jms7396hdkg-a.oregon-postgres.render.com/alpha_flsq",
+        "postgresql://pguser:zmfLzC3hqRf43N5abIpIbdkmllswE9Hj@dpg-ct6h009u0jms7396hdkg-a/alpha_flsq",
         pool_size=50, echo=False)
     return engine
 
