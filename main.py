@@ -17,6 +17,7 @@ Session(app)
 CSV_IN = r'flare-2.csv'
 JSON_OUT = r'SSData.json'
 
+
 def csv_to_json(csvFilePath, jsonFilePath):
     jsonArray = []
 
@@ -35,6 +36,7 @@ def csv_to_json(csvFilePath, jsonFilePath):
         jsonString = json.dumps(jsonArray, indent=4)
         jsonf.write(jsonString)
 
+
 # Routing do define url
 @app.route('/')
 def index():
@@ -42,50 +44,67 @@ def index():
     return render_template('index.html')
 
 
-@app.route('/treemap/<start_date>/<end_date>/<etfs>')
-def treemap(start_date=0, end_date=0, etfs=0):
-    finraList =[]
+@app.route('/treemap/<start_date>/<end_date>/<min_vol>/<etfs>')
+def treemap(start_date=0, end_date=0, min_vol=5000000, etfs=0):
+    print(min_vol)
+    finraList = []
     if start_date:
         finra_df = pd.DataFrame()
         finra_detail = pd.DataFrame()
-        if not session.get("data"):
-            # fetching data for selected date range from FINRA
-            session['startdate'] = start_date
-            session['enddate'] = end_date
-            finraList = get_ssdata(start_date, end_date, etfs)
-            finra_df = finraList[0]
-            finra_detail = finraList[1]
-            session['data'] = finra_df
-            session['dataDetail'] = finra_detail
-        else:
-            if session['startdate'] == start_date and session['enddate'] == end_date:
-                finra_df = session['data']
-            else:
+
+        try:
+            if not session.get("data"):
+                # fetching data for selected date range from FINRA
                 session['startdate'] = start_date
                 session['enddate'] = end_date
-                finraList = get_ssdata(start_date, end_date, etfs)
+                session['minvol'] = min_vol
+                print("Are we here?")
+                finraList = get_ssdata(start_date, end_date, min_vol, etfs)
                 finra_df = finraList[0]
                 finra_detail = finraList[1]
                 session['data'] = finra_df
                 session['dataDetail'] = finra_detail
-        temp_df = pd.read_json(finra_df)
-        temp_df = temp_df[temp_df["Fund"].isin(list(etfs.split(",")))]
-        finra_df = temp_df.to_json(orient='records')
-        finraList = [finra_df, finra_detail]
-        return finra_df
+            else:
+                if session['startdate'] == start_date and session['enddate'] == end_date and session[
+                    'minvol'] == min_vol:
+                    finra_df = session['data']
+                else:
+                    session['startdate'] = start_date
+                    session['enddate'] = end_date
+                    session['minvol'] = min_vol
+                    print("Or here?")
+                    finraList = get_ssdata(start_date, end_date, min_vol, etfs)
+                    finra_df = finraList[0]
+                    finra_detail = finraList[1]
+                    session['data'] = finra_df
+                    session['dataDetail'] = finra_detail
+            # Check to see if DF is empty and need to reload most recent available period
+            if finraList == ['[]', '[]']:
+                raise Exception("No data for selected timeframe")
+            temp_df = pd.read_json(finra_df)
+            temp_df = temp_df[temp_df["Fund"].isin(list(etfs.split(",")))]
+            finra_df = temp_df.to_json(orient='records')
+            finraList = [finra_df, finra_detail]
+            return finra_df
+
+        except Exception as e:
+            print(e)
+            return finra_df
 
     else:
         return jsonify({"error": "Could not load data for " + start_date})
+
 
 @app.route('/barchart/<symbol>')
 def barchart(symbol):
     finra_detail = session['dataDetail']
     temp_df = pd.read_json(finra_detail)
     temp_df = temp_df.loc[temp_df['Symbol'] == symbol]
-    temp_df["Date"] = pd.to_datetime(temp_df["Date"],format='%Y%m%d').dt.strftime('%m-%d-%Y')
+    temp_df["Date"] = pd.to_datetime(temp_df["Date"], format='%Y%m%d').dt.strftime('%m-%d-%Y')
     temp_df['Date'] = temp_df['Date'].astype(str)
     finra_detail = temp_df.to_json(orient='records')
     return finra_detail
+
 
 @app.route('/get-json', methods=['GET', 'POST'])
 def get_json():
@@ -102,11 +121,6 @@ def get_json():
 #     get_ssdata("2022/12/08")
 
 
-
-
 if __name__ == '__main__':
     # Threaded option to enable multiple instances for multiple user access support
     app.run(debug=True, port=5000)
-
-
-

@@ -11,6 +11,7 @@
 
 // IE browser doesn't support "class"
 var DateRangePicker;
+
 (function () {
     DateRangePicker = function (element, options, cb) {
 
@@ -459,6 +460,7 @@ var DateRangePicker;
         constructor: DateRangePicker,
 
         setStartDate: function(startDate) {
+
             if (typeof startDate === 'string')
                 this.startDate = moment(startDate, this.locale.format);
 
