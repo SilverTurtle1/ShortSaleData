@@ -5,6 +5,7 @@ import time
 from datetime import datetime
 from datetime import timedelta
 
+from importlib.metadata import version
 import pandas as pd
 import requests
 from sqlalchemy import MetaData, Table, Column, String, BIGINT, ForeignKey, text, Float
@@ -69,6 +70,25 @@ def get_session():
     session = sessionmaker(bind=engine)()
     return session
 
+def myengine_execute(engine, sql):
+  #If sqlalchemy version starts with 1.4 then do it the old way
+  print("In Here")
+  sqlalchemy_version = version("sqlalchemy")
+  if sqlalchemy_version.startswith('1.4.'):
+    with engine.connect() as conn:
+        print("In Here 5")
+        return conn.execute(text(sql))
+  else:
+    #otherwise do it the new way with transactions:
+    with engine.connect() as conn:
+        print("In Here 6")
+        print(type(sql))
+        result = conn.execute(sql)
+        #print(result.inserted_primary_key())
+        conn.commit()
+
+    upd_sql = "update bankaccount set amount = amount+5e10 where id = 1234567"
+    result = myengine_execute(upd_sql)
 
 def get_ssdata(startdate, enddate=0, minvol=5000000, etfs=0):
     print("Here")
@@ -178,7 +198,11 @@ def get_ssdata(startdate, enddate=0, minvol=5000000, etfs=0):
                 INSERT INTO "FINRAFiles" ("Date", "FileURL") VALUES (:date, :file)
             """)
             sql = sql.bindparams(date=d, file=finra_file)
-            engine.execute(sql)
+            #engine.execute(sql)
+            #myengine_execute(engine, sql)
+            conn = engine.connect()
+            conn.execute(sql)
+            conn.commit()
 
             # start_time = time.time()
             #
