@@ -81,7 +81,7 @@ svg.append("g")
     // Animation
     svg.selectAll("rect")
       .transition()
-      .duration(800)
+      .duration(1000)
       .attr("x", d => x(d[0]) )
       .attr("width", function(d) { return x(d[1]) - x(d[0]); })
       .delay(function(d,i){return(i*100)})

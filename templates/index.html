@@ -12,6 +12,7 @@
     <link type="text/css" rel="stylesheet" href="/static/css/vanilla-datetimerange-picker.css">
     <link type="text/css" rel="stylesheet" href="/static/css/loader.css">
     <link type="text/css" rel="stylesheet" href="/static/css/index.css">
+    <link type="text/css" rel="stylesheet" href="/static/css/slider.css">
     <title>FINRA Dark Pool Transactions</title>
 </head>
 <body class="body-main">
@@ -86,7 +87,20 @@
 
     <script src="https://cdn.jsdelivr.net/momentjs/latest/moment.min.js" type="text/javascript"></script>
     <script src="/static/js/vanilla-datetimerange-picker.js"></script>
+    <div class="container">
+      <input type="range" min="0" max="10000000" step="500000" id="myRange">
+        <p>Min Daily Total Volume: <span id="demo"></span></p>
+    </div>
+    <script>
+        var slider = document.getElementById("myRange");
+        var output = document.getElementById("demo");
+        output.innerHTML = slider.value;
 
+        slider.oninput = function() {
+          output.innerHTML = this.value;
+          loadData();
+        }
+    </script>
     <div id="checkboxes">
         <p></p>
         <script>
@@ -94,20 +108,45 @@
             var rangeEnd;
 
             function populateTreemap(startDate, endDate) {
+                start = startDate;
+                end = endDate;
+                minvol = slider.value;
                 let checkboxes = document.querySelectorAll('input[name="fund"]:checked');
                 let values = [];
                 checkboxes.forEach((checkbox) => {
                     values.push(checkbox.value);
                 });
-                fetch('/treemap/'+ startDate +'/'+ endDate + '/' + values)
-                    .then(function(response){
-                        // check for empty response
-                        response.json().then(function(response){
-                            renderJSONTreeMap(response);
-                            var spinner = document.querySelector(".loader");
-                            spinner.classList.add("loader-hidden");
+
+
+
+                    fetch('/treemap/'+ start +'/'+ end + '/' + minvol + '/' + values)
+                        .then(function(response){
+                            response.json().then(function(response){
+                                renderJSONTreeMap(response);
+                                var spinner = document.querySelector(".loader");
+                                spinner.classList.add("loader-hidden");
+                            })
+                        .catch(function(err) {
+                            start = moment().subtract(3, 'days').startOf('day').format('YYYYMMDD');
+                            end = moment().endOf('day').format('YYYYMMDD');
+                             fetch('/treemap/'+ start +'/'+ end + '/' + minvol + '/' + values)
+                            .then(function(response){
+                                response.json().then(function(response){
+                                    renderJSONTreeMap(response);
+                                    var spinner = document.querySelector(".loader");
+                                    spinner.classList.add("loader-hidden");
+                                })
+                            })
+                            start = moment().subtract(3, 'days').startOf('day').format('MM/DD/YYYY');
+                            end = end = moment().endOf('day').format('MM/DD/YYYY');
+                            document.getElementById("datetimerange-input1").value = start + " - " + end;
+
                         })
-                     })
+
+
+                    })
+
+
             }
 
             function populateBarChart(symbol) {
@@ -119,7 +158,25 @@
                      })
             }
 
-            const funds = ["SPX","XLB","XLC","XLE","XLF","XLI","XLK","XLP","XLU","XLV","XLY", "XRT"];
+            function validateCheckboxes() {
+                  const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+                  let atLeastOneChecked = false;
+
+                  for (let i = 0; i < checkboxes.length; i++) {
+                    if (checkboxes[i].checked) {
+                      atLeastOneChecked = true;
+                      break; // No need to continue checking once one is found
+                    }
+                  }
+
+                  if (!atLeastOneChecked) {
+                    return false; // Prevent form submission
+                  }
+
+                  return true; // Allow form submission
+                }
+
+            const funds = ["SPX","XLB","XLC","XLE","XLF","XLI","XLK","XLP","XLU","XLV","XLY", "XRT","Other"];
             funds.forEach((fund)=>{
                 //  generate id
                 const id = `fund-${fund}`;
@@ -130,6 +187,7 @@
 
                 // create a checkbox
                 const checkbox = document.createElement('input');
+
                 checkbox.type = "checkbox";
                 checkbox.name = "fund";
                 checkbox.value = fund;
@@ -137,8 +195,17 @@
                 checkbox.checked = false;
                 if (fund == 'SPX') {
                     checkbox.checked = true;
-                    checkbox.disabled = true;
+                    // checkbox.disabled = true;
                 }
+
+                checkbox.addEventListener('click', function() {
+                    if (validateCheckboxes()) {
+                        loadData();
+                    }
+                    else {
+                         checkbox.checked = true;
+                    }
+                })
 
                 // place the checkbox inside a label
                 label.appendChild(checkbox);
@@ -149,8 +216,8 @@
             });
         </script>
     </div>
-     <p></p>
-    <button class="btn" id="dataBtn" onclick="loadData()">Apply Fund Filters</button>
+    <p></p>
+    <p></p>
     <div class="svg" id="svg_container"></div>
 </div>
 <script>
@@ -200,7 +267,7 @@
     <button class="btn-close">⨉</button>
   </div>
   <div>
-    <h3>Daily Total Volume</h3>
+    <h3>Daily Dealer Volume</h3>
       <p></p>
       <p></p>
       <p></p>
@@ -230,6 +297,7 @@
             'end_date' : end_date
         }
         window.addEventListener("load", function (event) {
+
             new DateRangePicker('datetimerange-input1',
                 {
                     timePicker: true,
@@ -253,7 +321,9 @@
                         rangeEnd = daterange['end_date']
                         // update data source
 
+
                         populateTreemap( daterange['start_date'], daterange['end_date']);
+                        var dateElement = document.getElementById("datetimerange-input1");
                         document.getElementById("svg_detail").innerHTML = "";
 
                 })
