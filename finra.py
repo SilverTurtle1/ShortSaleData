@@ -134,7 +134,7 @@ def get_ssdata(startdate, enddate=0, minvol=5000000, etfs=0):
     session = get_session()
     # session.close()
     engine = session.get_bind()
-
+    conn = engine.connect()
     metadata = MetaData()
 
     finra_files = Table('FINRAFiles', metadata,
@@ -200,10 +200,11 @@ def get_ssdata(startdate, enddate=0, minvol=5000000, etfs=0):
             sql = sql.bindparams(date=d, file=finra_file)
             #engine.execute(sql)
             #myengine_execute(engine, sql)
-            conn = engine.connect()
+            print("Before Insert into FINRA DB")
+
             conn.execute(sql)
             conn.commit()
-
+            print("After Insert into FINRA DB")
             # start_time = time.time()
             #
             # etf_df = pd.read_csv(os.path.join(src_dir, data_dir, mapping_file))
@@ -246,7 +247,10 @@ def get_ssdata(startdate, enddate=0, minvol=5000000, etfs=0):
                             INSERT INTO "FINRAFiles" ("Date") VALUES (:date)
                         """)
             sql = sql.bindparams(date=d)
-            engine.execute(sql)
+            print("In Exception handling")
+            conn.execute(sql)
+            conn.commit()
+            #engine.execute(sql)
 
             if numDays == 0:
                 prior_day = datetime.strptime(temp_start, '%Y%m%d') - timedelta(days=1)
