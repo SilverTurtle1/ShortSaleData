@@ -42,8 +42,8 @@ def index_level_dtypes(df):
 
 def get_engine(user, passwd, host, port, db):
     url = f"postgresql://{user}:{passwd}@{host}:{port}/{db}"
-    if not database_exists(url):
-        create_database(url)
+    #if not database_exists(url):
+    #    create_database(url)
     #postgresql://pguser:zmfLzC3hqRf43N5abIpIbdkmllswE9Hj@dpg-ct6h009u0jms7396hdkg-a.oregon-postgres.render.com/alpha_flsq
     #postgresql://pguser:zmfLzC3hqRf43N5abIpIbdkmllswE9Hj@dpg-ct6h009u0jms7396hdkg-a/alpha_flsq
     engine = create_engine(
