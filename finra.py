@@ -48,7 +48,7 @@ def get_engine(user, passwd, host, port, db):
     #postgresql://pguser:zmfLzC3hqRf43N5abIpIbdkmllswE9Hj@dpg-ct6h009u0jms7396hdkg-a.oregon-postgres.render.com/alpha_flsq
     #postgresql://pguser:zmfLzC3hqRf43N5abIpIbdkmllswE9Hj@dpg-ct6h009u0jms7396hdkg-a/alpha_flsq
     engine = create_engine(
-        "postgresql://pguser:zmfLzC3hqRf43N5abIpIbdkmllswE9Hj@dpg-ct6h009u0jms7396hdkg-a/alpha_flsq",
+        "postgresql://pguser:zmfLzC3hqRf43N5abIpIbdkmllswE9Hj@dpg-ct6h009u0jms7396hdkg-a.oregon-postgres.render.com/alpha_flsq",
         pool_size=50, echo=False)
     return engine
 
@@ -86,8 +86,6 @@ def myengine_execute(engine, sql):
         result = conn.execute(sql)
         #print(result.inserted_primary_key())
         conn.commit()
-
-    upd_sql = "update bankaccount set amount = amount+5e10 where id = 1234567"
     result = myengine_execute(upd_sql)
 
 def get_ssdata(startdate, enddate=0, minvol=5000000, etfs=0):
@@ -96,6 +94,7 @@ def get_ssdata(startdate, enddate=0, minvol=5000000, etfs=0):
     file_date = re.sub("\/", "", startdate)
     input_date = startdate
     temp_start = startdate
+    pd.set_option('display.max_rows', None)
     finra_df = pd.DataFrame()
     detail_df = pd.DataFrame()
 
@@ -166,6 +165,7 @@ def get_ssdata(startdate, enddate=0, minvol=5000000, etfs=0):
             dates.remove(str(row.Date))
 
     print("Still need to load files from FINRA for ... ", dates)
+
 
     # engine = session.get_bind()
 
@@ -263,14 +263,16 @@ def get_ssdata(startdate, enddate=0, minvol=5000000, etfs=0):
 
     # At this point all FINRA data for selected timeframe is stored in the database
     # temp_df = ssdata_temp[(ssdata_temp.TotalVolume > min_volume)]
+
     print("Load the following dates from db ... ", date_list)
     select = text("""
-        SELECT * FROM "FINRAFileDetail" WHERE "Date" IN :datelist AND "TotalVolume" > :minvolume
+        SELECT * FROM "FINRAFileDetail" WHERE "Date" IN :datelist AND "TotalVolume" > :minvolume ORDER BY "Date"
     """)
-    print(minvol)
+
     select = select.bindparams(datelist=tuple(date_list), minvolume=minvol)
     # engine.execute(select)
     finra_df = pd.read_sql(select, engine)
+
     engine.dispose()  # Close all checked in sessions
 
     # while True:
@@ -317,6 +319,8 @@ def get_ssdata(startdate, enddate=0, minvol=5000000, etfs=0):
     detail_df["LongVolume"] = detail_df["TotalVolume"] - detail_df["ShortVolume"]
     detail_df.drop(columns=["ShortExemptVolume", "Market"], inplace=True)
     finra_df = finra_df.groupby('Symbol').sum().reset_index()
+
+    finra_df.sort_values(by=["Date"], inplace=True)
 
     while True:
         try:

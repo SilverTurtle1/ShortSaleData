@@ -63,7 +63,6 @@ svg.append("g")
     .keys(volgroups)
     (data)
 
-
  svg.append("g")
     .selectAll("g")
     .data(stackedData)
