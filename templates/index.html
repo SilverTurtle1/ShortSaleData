@@ -88,16 +88,27 @@
     <script src="https://cdn.jsdelivr.net/momentjs/latest/moment.min.js" type="text/javascript"></script>
     <script src="/static/js/vanilla-datetimerange-picker.js"></script>
     <div class="container">
-      <input type="range" min="0" max="10000000" step="500000" id="myRange">
-        <p>Min Daily Total Volume: <span id="demo"></span></p>
+        <input type="range" min="30" max="70" step="10" id="percslider">
+        <p>Min Short Volume %: <span id="minperc"></span></p>
+      <input type="range" min="0" max="10000000" step="500000" id="volslider">
+        <p>Min Daily Total Volume: <span id="minvol"></span></p>
     </div>
     <script>
-        var slider = document.getElementById("myRange");
-        var output = document.getElementById("demo");
+        var slider = document.getElementById("volslider");
+        var output = document.getElementById("minvol");
         output.innerHTML = slider.value;
 
         slider.oninput = function() {
           output.innerHTML = this.value;
+          loadData();
+        }
+
+        var percslider = document.getElementById("percslider");
+        var percoutput = document.getElementById("minperc");
+        percoutput.innerHTML = slider.value;
+
+        percslider.oninput = function() {
+          percoutput.innerHTML = this.value;
           loadData();
         }
     </script>
@@ -111,6 +122,7 @@
                 start = startDate;
                 end = endDate;
                 minvol = slider.value;
+                percshort = percslider.value;
                 let checkboxes = document.querySelectorAll('input[name="fund"]:checked');
                 let values = [];
                 checkboxes.forEach((checkbox) => {
@@ -119,7 +131,7 @@
 
 
 
-                    fetch('/treemap/'+ start +'/'+ end + '/' + minvol + '/' + values)
+                    fetch('/treemap/'+ start +'/'+ end + '/' + minvol + '/' + percshort + '/' + values)
                         .then(function(response){
                             response.json().then(function(response){
                                 renderJSONTreeMap(response);
@@ -129,7 +141,7 @@
                         .catch(function(err) {
                             start = moment().subtract(3, 'days').startOf('day').format('YYYYMMDD');
                             end = moment().endOf('day').format('YYYYMMDD');
-                             fetch('/treemap/'+ start +'/'+ end + '/' + minvol + '/' + values)
+                             fetch('/treemap/'+ start +'/'+ end + '/' + minvol + '/' + percshort + '/' + values)
                             .then(function(response){
                                 response.json().then(function(response){
                                     renderJSONTreeMap(response);

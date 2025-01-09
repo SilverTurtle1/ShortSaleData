@@ -45,9 +45,9 @@ def index():
     return render_template('index.html')
 
 
-@app.route('/treemap/<start_date>/<end_date>/<min_vol>/<etfs>')
-def treemap(start_date=0, end_date=0, min_vol=5000000, etfs=0):
-    print(min_vol)
+@app.route('/treemap/<start_date>/<end_date>/<min_vol>/<perc_short>/<etfs>')
+def treemap(start_date=0, end_date=0, min_vol=5000000, perc_short=50, etfs=0):
+    #print("In treemap path: start_date = " + start_date + " min_vol=" + min_vol + " perc_short = " + perc_short)
     finraList = []
     if start_date:
         finra_df = pd.DataFrame()
@@ -59,22 +59,24 @@ def treemap(start_date=0, end_date=0, min_vol=5000000, etfs=0):
                 session['startdate'] = start_date
                 session['enddate'] = end_date
                 session['minvol'] = min_vol
-                print("Are we here?")
-                finraList = get_ssdata(start_date, end_date, min_vol, etfs)
+                session['percshort'] = perc_short
+                #print("Are we here?")
+                finraList = get_ssdata(start_date, end_date, min_vol, perc_short, etfs)
                 finra_df = finraList[0]
                 finra_detail = finraList[1]
                 session['data'] = finra_df
                 session['dataDetail'] = finra_detail
             else:
                 if session['startdate'] == start_date and session['enddate'] == end_date and session[
-                    'minvol'] == min_vol:
+                    'minvol'] == min_vol and session['percshort'] == perc_short:
                     finra_df = session['data']
                 else:
                     session['startdate'] = start_date
                     session['enddate'] = end_date
                     session['minvol'] = min_vol
-                    print("Or here?")
-                    finraList = get_ssdata(start_date, end_date, min_vol, etfs)
+                    session['percshort'] = perc_short
+                    #print("Or here?")
+                    finraList = get_ssdata(start_date, end_date, min_vol, perc_short, etfs)
                     finra_df = finraList[0]
                     finra_detail = finraList[1]
                     session['data'] = finra_df
