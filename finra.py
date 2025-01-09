@@ -42,13 +42,14 @@ def index_level_dtypes(df):
 
 
 def get_engine(user, passwd, host, port, db):
-    url = f"postgresql://{user}:{passwd}@{host}:{port}/{db}"
+    #url = f"postgresql://{user}:{passwd}@{host}:{port}/{db}"
+    url = f"postgresql://pguser:zmfLzC3hqRf43N5abIpIbdkmllswE9Hj@dpg-ct6h009u0jms7396hdkg-a.oregon-postgres.render.com/alpha_flsq"
     #if not database_exists(url):
     #    create_database(url)
     #postgresql://pguser:zmfLzC3hqRf43N5abIpIbdkmllswE9Hj@dpg-ct6h009u0jms7396hdkg-a.oregon-postgres.render.com/alpha_flsq
     #postgresql://pguser:zmfLzC3hqRf43N5abIpIbdkmllswE9Hj@dpg-ct6h009u0jms7396hdkg-a/alpha_flsq
     engine = create_engine(
-        "postgresql://pguser:zmfLzC3hqRf43N5abIpIbdkmllswE9Hj@dpg-ct6h009u0jms7396hdkg-a/alpha_flsq",
+        url,
         pool_size=50, echo=False)
     return engine
 
@@ -72,25 +73,25 @@ def get_session():
 
 def myengine_execute(engine, sql):
   #If sqlalchemy version starts with 1.4 then do it the old way
-  print("In Here")
+  #print("In Here")
   sqlalchemy_version = version("sqlalchemy")
   if sqlalchemy_version.startswith('1.4.'):
     with engine.connect() as conn:
-        print("In Here 5")
+        #print("In Here 5")
         return conn.execute(text(sql))
   else:
     #otherwise do it the new way with transactions:
     with engine.connect() as conn:
-        print("In Here 6")
-        print(type(sql))
+        #print("In Here 6")
+        #print(type(sql))
         result = conn.execute(sql)
         #print(result.inserted_primary_key())
         conn.commit()
     result = myengine_execute(upd_sql)
 
-def get_ssdata(startdate, enddate=0, minvol=5000000, etfs=0):
-    print("Here")
-    print(minvol)
+def get_ssdata(startdate, enddate=0, minvol=5000000, percshort=50.00, etfs=0):
+    #print("Here")
+    #print(percshort)
     file_date = re.sub("\/", "", startdate)
     input_date = startdate
     temp_start = startdate
@@ -200,11 +201,11 @@ def get_ssdata(startdate, enddate=0, minvol=5000000, etfs=0):
             sql = sql.bindparams(date=d, file=finra_file)
             #engine.execute(sql)
             #myengine_execute(engine, sql)
-            print("Before Insert into FINRA DB")
+            #print("Before Insert into FINRA DB")
 
             conn.execute(sql)
             conn.commit()
-            print("After Insert into FINRA DB")
+            #print("After Insert into FINRA DB")
             # start_time = time.time()
             #
             # etf_df = pd.read_csv(os.path.join(src_dir, data_dir, mapping_file))
@@ -266,10 +267,14 @@ def get_ssdata(startdate, enddate=0, minvol=5000000, etfs=0):
 
     print("Load the following dates from db ... ", date_list)
     select = text("""
-        SELECT * FROM "FINRAFileDetail" WHERE "Date" IN :datelist AND "TotalVolume" > :minvolume ORDER BY "Date"
+        SELECT * FROM "FINRAFileDetail" WHERE "Date" IN :datelist AND "TotalVolume" > :minvolume AND CAST("ShortVolume" AS Float)/CAST("TotalVolume" AS Float) >= :shortpercent ORDER BY "Date"
     """)
-
-    select = select.bindparams(datelist=tuple(date_list), minvolume=minvol)
+    #AND "ShortVolume/TotalVolume" >= :shortpercent
+    #print("Here 12")
+    select = select.bindparams(datelist=tuple(date_list), minvolume=minvol, shortpercent=(float(percshort)/100))
+    #select = select.bindparams(datelist=tuple(date_list), minvolume=minvol)
+    #print("Here 13")
+    #print(select)
     # engine.execute(select)
     finra_df = pd.read_sql(select, engine)
 
@@ -340,7 +345,7 @@ def get_ssdata(startdate, enddate=0, minvol=5000000, etfs=0):
 
             if etfOnly:
 
-                print("Made it here!")
+                #print("Made it here!")
                 # print(os.path.join(src_dir, mapping_file))
                 etf_df = pd.read_csv(os.path.join(src_dir, data_dir, mapping_file))
                 # print("Mapping File Pre Filter")
@@ -364,7 +369,7 @@ def get_ssdata(startdate, enddate=0, minvol=5000000, etfs=0):
                 mapped_df["Short%"] = mapped_df["ShortVolume"] / mapped_df["TotalVolume"]
                 mapped_df["name"] = mapped_df["Fund"] + "." + mapped_df["Symbol"]
 
-                print("Made it here2!")
+                #print("Made it here2!")
 
                 # start_time = time.time()
                 # tickers = Ticker(mapped_df['Symbol'])
