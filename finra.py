@@ -2,23 +2,32 @@ import io
 import os
 import re
 import time
+from multiprocessing.pool import CLOSE
+
+import yfinance as yf
 from datetime import datetime
 from datetime import timedelta
 
 from importlib.metadata import version
 import pandas as pd
 import requests
+
 from sqlalchemy import MetaData, Table, Column, String, BIGINT, ForeignKey, text, Float
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, Relationship, relationship
 from sqlalchemy_utils import database_exists, create_database
 
-from local_settings import postgresql as settings
+from polygon import RESTClient
+
+from local_settings import postgresql_local as settings_local
+from local_settings import postgresql_render as settings_render
+from local_settings import polygonAPIkey as apikey
 
 finra_dir = r'https://cdn.finra.org/equity/regsho/daily/CNMSshvol'
 data_dir = r'static/data/'
 mapping_file = 'etfMapping-backup.csv'
-min_volume = 5000000  # 5M shares traded daily min
+#min_volume = 1  # 5M shares traded daily min
+local_db = False
 
 
 def get_csv(url):
@@ -42,6 +51,7 @@ def index_level_dtypes(df):
 
 
 def get_engine(user, passwd, host, port, db):
+
     url = f"postgresql://{user}:{passwd}@{host}:{port}/{db}"
     #url = f"postgresql://pguser:zmfLzC3hqRf43N5abIpIbdkmllswE9Hj@dpg-ct6h009u0jms7396hdkg-a.oregon-postgres.render.com/alpha_flsq"
     #if not database_exists(url):
@@ -56,6 +66,10 @@ def get_engine(user, passwd, host, port, db):
 
 def get_engine_from_settings():
     keys = ['pguser', 'pgpasswd', 'pghost', 'pgport', 'pgdb']
+    if local_db:
+        settings = settings_local
+    else:
+        settings = settings_render
     if not all(key in keys for key in settings.keys()):
         raise Exception('Bad config file')
 
@@ -143,7 +157,7 @@ def get_ssdata(startdate, enddate=0, minvol=5000000, percshort=50.00, etfs=0):
                         )
 
     finra_file_detail = Table('FINRAFileDetail', metadata,
-                              Column('Date', BIGINT, ForeignKey('FINRAFiles.Date'), nullable=False),
+                              Column('Date', BIGINT, ForeignKey('FINRAFiles.Date', ondelete='CASCADE'), nullable=False),
                               Column('Symbol', String(10)),
                               Column('ShortVolume', BIGINT),
                               Column('ShortExemptVolume', BIGINT),
@@ -161,25 +175,10 @@ def get_ssdata(startdate, enddate=0, minvol=5000000, percshort=50.00, etfs=0):
     select = select.bindparams(date_list=tuple(date_list))
     with engine.begin() as con:
         for row in con.execute(select):
-            print(row.Date)
             # remove entries that already exist
             dates.remove(str(row.Date))
 
     print("Still need to load files from FINRA for ... ", dates)
-
-
-    # engine = session.get_bind()
-
-    # Retrieve dates from database to determine if any additional FINRA files are needed
-
-    # pg_conn = psycopg2.connect(conn_string)
-    #
-    # session = get_session()
-    # # result = session.execute('''Select DISTINCT("Date") from to_finra_test''')
-    # result = session.execute(sa.text(sql_string))
-    # for e in result:
-    #     print(e.date)
-    # session.close()
 
     sql_compare = '''
         SELECT  IF NOT EXISTS finra_no_file (date varchar(10) NOT NULL,
@@ -201,42 +200,24 @@ def get_ssdata(startdate, enddate=0, minvol=5000000, percshort=50.00, etfs=0):
             sql = sql.bindparams(date=d, file=finra_file)
             #engine.execute(sql)
             #myengine_execute(engine, sql)
-            #print("Before Insert into FINRA DB")
+            print("Before Insert into FINRA DB")
 
             conn.execute(sql)
             conn.commit()
-            #print("After Insert into FINRA DB")
-            # start_time = time.time()
-            #
-            # etf_df = pd.read_csv(os.path.join(src_dir, data_dir, mapping_file))
-            # funds = ["SPX", "XLB", "XLC", "XLE", "XLF", "XLI", "XLK", "XLP", "XLU", "XLV", "XLY", "XRT"];
-            # etf_df = etf_df[etf_df["Fund"].isin(funds)]
-            #
-            # mapped_df = pd.merge(ssdata_temp, etf_df, on='Symbol')
-            # mapped_df.drop(
-            #     columns=["Name", "% Holding"], inplace=True)
-            # print(mapped_df)
-            # tickers = Ticker(mapped_df['Symbol'])
-            # # Start date for Yahoo Finance data should still be the min date in the FINRA df
-            # # start = datetime.strptime(str(finra_df["Date"].min()), '%Y%m%d')
-            # start = datetime.strptime(d, '%Y%m%d')
-            # end = datetime.strptime(d, '%Y%m%d') + timedelta(days=1)
-            # # Set YFinance end date to the min of FINRA end date and current date - 1. Don't want to deal with Yahoo formatting for current date
-            # print("Start Date: ", start)
-            # print("End Date: ", end)
-            # pricedf = tickers.history(start=start, end=end)
-            # print("Made it here5!")
-            # # Flatten multi index df to simplify data manipulation
-            # pricedf = pricedf.reset_index().astype(str)
-            # print(pricedf)
-            # print("Time to load Tickers from Yahoo Finance: {} seconds".format(time.time() - start_time))
 
-            ssdata_temp.to_sql('FINRAFileDetail', con=engine, if_exists='append', index=False)
-            # sql = '''
-            # COPY copy_test
-            # FROM 'PATH_TO_FILE.csv' --input full file path here. see line 46
-            # DELIMITER ',' CSV;
-            # '''
+            client = RESTClient(apikey)
+            aggs = client.get_grouped_daily_aggs(f"{d[:4]}-{d[4:6]}-{d[6:]}")
+            data = []
+            for agg in aggs:
+                data.append({
+                    "Symbol": agg.ticker,
+                    "Close": agg.close
+                })
+            polygondf = pd.DataFrame(data)
+            mergeddf = pd.merge(polygondf, ssdata_temp, on='Symbol', how='right')
+            # print(mergeddf)
+            print("Before writing FINRA file to SQL")
+            mergeddf.to_sql('FINRAFileDetail', con=engine, if_exists='append', index=False)
             print("to_sql duration: {} seconds".format(time.time() - start_time))
             # Also load the closing price of the day for each ticker in the FINRA file and update FINRAFileDetail
 
@@ -272,47 +253,9 @@ def get_ssdata(startdate, enddate=0, minvol=5000000, percshort=50.00, etfs=0):
     #AND "ShortVolume/TotalVolume" >= :shortpercent
     #print("Here 12")
     select = select.bindparams(datelist=tuple(date_list), minvolume=minvol, shortpercent=(float(percshort)/100))
-    #select = select.bindparams(datelist=tuple(date_list), minvolume=minvol)
-    #print("Here 13")
-    #print(select)
-    # engine.execute(select)
     finra_df = pd.read_sql(select, engine)
 
     engine.dispose()  # Close all checked in sessions
-
-    # while True:
-    #     for i in values:
-    #         cur_day = datetime.strptime(temp_start, '%Y%m%d') + timedelta(days=i)
-    #         file_date = cur_day.strftime('%Y%m%d')
-    #         finra_file = finra_dir + f'{file_date}.txt'
-    #         try:
-    #             ssdata_temp = get_csv(finra_file)
-    #             # start_time = time.time()
-    #             # ssdata_temp.to_sql('to_finra_test', con=conn, if_exists='replace', index=False)
-    #             # print("to_sql duration: {} seconds".format(time.time() - start_time))
-    #             temp_df = ssdata_temp[(ssdata_temp.TotalVolume > min_volume)]
-    #             if finra_df.empty:
-    #                 finra_df = temp_df.copy()
-    #             else:
-    #                 finra_df = pd.concat([finra_df, temp_df.copy()], axis=0)
-    #             temp_start = input_date
-    #         except requests.HTTPError as e:
-    #             print(f"[!] Exception caught: {e}{file_date}")
-    #             # Create entry in db to indicate no file ONLY if date is not today
-    #             sql = f'''INSERT INTO finra_no_file (date) VALUES ({file_date}) ON CONFLICT (date) DO NOTHING'''
-    #             # cur = pg_conn.cursor()
-    #             # cur.execute(table_create_sql)
-    #             # cur.execute(sql)
-    #             # pg_conn.commit()
-    #             # cur.close()
-    #             if numDays == 0:
-    #                 prior_day = datetime.strptime(temp_start, '%Y%m%d') - timedelta(days=1)
-    #                 temp_start = prior_day.strftime('%Y%m%d')
-    #                 finra_file = finra_dir + f'{temp_start}.txt'
-    #             continue
-    #
-    #     if temp_start == input_date:
-    #         break
 
     if finra_df.empty:
         print("Empty DF - return first recent day with data")
@@ -323,24 +266,35 @@ def get_ssdata(startdate, enddate=0, minvol=5000000, percshort=50.00, etfs=0):
     detail_df = finra_df.copy()
     detail_df["LongVolume"] = detail_df["TotalVolume"] - detail_df["ShortVolume"]
     detail_df.drop(columns=["ShortExemptVolume", "Market"], inplace=True)
+    decimals = 2
+    # Start date for Yahoo Finance data should still be the min date in the FINRA df
+    start = datetime.strptime(str(detail_df["Date"].min()), '%Y%m%d')
+    end = datetime.strptime(str(detail_df["Date"].max()), '%Y%m%d')
+    # end = min([datetime.strptime(str(yfMaxDate), '%Y%m%d') + timedelta(days=1), datetime.today() + timedelta(days=1)])
+    # print("Date Range: ", start.strftime('%Y%m%d'), " - ", end.strftime('%Y%m%d') )
+    # finra_df[finra_df.Symbol == 'SUNE'])
+    close_df = detail_df.copy()
+    # print("Here")
+    # print(start_df)
+    close_df.drop(columns=["ShortVolume","TotalVolume","LongVolume"], inplace=True)
+    start_df = close_df[(close_df.Date == int(start.strftime('%Y%m%d')))]
+    end_df = close_df[(close_df.Date == int(end.strftime('%Y%m%d')))]
+    # print("Start DF")
+    closingprices_df = pd.merge(start_df, end_df, on='Symbol')
+    closingprices_df[['Close_x', 'Close_y']] = closingprices_df[['Close_x', 'Close_y']].astype(float)
+    closingprices_df['gain'] = ((closingprices_df['Close_y']/closingprices_df['Close_x'])-1)
+    closingprices_df.drop(columns=["Close_x", "Close_y","Date_x","Date_y"], inplace=True)
+    closingprices_df['gain'] = closingprices_df['gain'].apply(lambda x: round(x, decimals+2))
+    # print(closingprices_df)
+    # print("FINRA DF - DATES SHOULD ALL BE CORRECT STILL: ", finra_df[finra_df.Symbol =='SUNE'])
+    # Statement below sums date field since there are multiple entries
     finra_df = finra_df.groupby('Symbol').sum().reset_index()
-
     finra_df.sort_values(by=["Date"], inplace=True)
 
     while True:
         try:
-            # print("In Try")
-            # print(file_date)
-            # finra_file = finra_dir + f'{file_date}.txt'
-            # print(finra_file)
-            # ssdata_temp = get_csv(finra_file)
-            # print("FINRA File")
-            # finra_df = ssdata_temp[(ssdata_temp.TotalVolume > min_volume)]
 
             finra_df['Percentile'] = finra_df.TotalVolume.rank(pct=True)
-
-            # finra_df = finra_df[(finra_df.Percentile > 0.5)]
-            # src_dir = os.path.dirname(os.path.abspath(__file__))
             final_df = pd.DataFrame()
 
             if etfOnly:
@@ -350,7 +304,7 @@ def get_ssdata(startdate, enddate=0, minvol=5000000, percshort=50.00, etfs=0):
                 etf_df = pd.read_csv(os.path.join(src_dir, data_dir, mapping_file))
                 # print("Mapping File Pre Filter")
                 # print(etfs)
-                funds = ["SPX", "XLB", "XLC", "XLE", "XLF", "XLI", "XLK", "XLP", "XLU", "XLV", "XLY", "XRT", "Other"];
+                funds = ["SPX", "XLB", "XLC", "XLE", "XLF", "XLI", "XLK", "XLP", "XLU", "XLV", "XLY", "XRT", "Other"]
                 if etfs != 0:
                     # etf_df = etf_df[etf_df["Fund"].isin(list(funds.split(",")))]
                     etf_df = etf_df[etf_df["Fund"].isin(funds)]
@@ -363,76 +317,20 @@ def get_ssdata(startdate, enddate=0, minvol=5000000, percshort=50.00, etfs=0):
                 # print(etf_symbols)
 
                 mapped_df = pd.merge(finra_df, etf_df, on='Symbol')
-                # print("Mapped File")
-                # print(mapped_df)
-
                 mapped_df["Short%"] = mapped_df["ShortVolume"] / mapped_df["TotalVolume"]
                 mapped_df["name"] = mapped_df["Fund"] + "." + mapped_df["Symbol"]
 
-                #print("Made it here2!")
-
-                # start_time = time.time()
-                # tickers = Ticker(mapped_df['Symbol'])
-                #
-                #
-                # print("Made it here3!")
-                #
-                # # Start date for Yahoo Finance data should still be the min date in the FINRA df
-                # start = datetime.strptime(str(finra_df["Date"].min()), '%Y%m%d')
-                #
-                # # end = datetime.strptime(enddate, '%Y%m%d')
-                #
-                # # Set YFinance end date to the min of FINRA end date and current date - 1. Don't want to deal with Yahoo formatting for current date
-                # # print(yfMaxDate)
-                # end = min([datetime.strptime(str(yfMaxDate), '%Y%m%d') + timedelta(days=1), datetime.today() + timedelta(days=1)])
-                # if start == end:
-                #     print("Start = End")
-                # # print("Start Date: ", start)
-                # # print("End Date: ", end)
-                # print("Made it here4!", start, end)
-                # pricedf = tickers.history(start=start, end=end)
-                # print("Time to load Tickers from Yahoo Finance: {} seconds".format(time.time() - start_time))
-                # # Flatten multi index df to simplify data manipulation
-                # pricedf = pricedf.reset_index().astype(str)
-                # print(pricedf)
-                # print("End of price df")
-                # closingprices_df = pd.DataFrame()
-                #
-                # if end.date() > datetime.today().date():
-                #     end = end - timedelta(days=1)
-                #
-                # if start.date() == datetime.today().date():
-                #     closingprices_df = pricedf
-                #     closingprices_df['gain'] = 0
-                # else:
-                #     start_df = pricedf[(pricedf.date == start.strftime('%Y-%m-%d'))]
-                #     # print(start_df)
-                #     # end_df = pricedf[(pricedf.date == (end - timedelta(days=1)).strftime('%Y-%m-%d'))]
-                #     end_df = pricedf[(pricedf.date == (end - timedelta(days=1)).strftime('%Y-%m-%d'))]
-                #     # print("End DF")
-                #     # print(end_df)
-                #     closingprices_df = start_df
-                #     if not end_df.empty:
-                #         # print("End DF not empty")
-                #         closingprices_df = pd.merge(start_df, end_df, on='symbol')
-                #         closingprices_df[['close_x', 'close_y']] = closingprices_df[['close_x','close_y']].astype(float)
-                #         closingprices_df['gain'] = ((closingprices_df['close_y']/closingprices_df['close_x'])-1)
-                #         closingprices_df.drop(columns=["close_x", "close_y"], inplace=True)
-                #     else:
-                #         closingprices_df['gain'] = 0
-                #         closingprices_df.drop(columns=["close"], inplace=True)
-
                 mapped_df.drop(
                     columns=["Date", "ShortVolume", "ShortExemptVolume", "Name", "% Holding"], inplace=True)
-                decimals = 2
+
                 mapped_df['Short%'] = mapped_df['Short%'].apply(lambda x: round(x, decimals))
-                # closingprices_df['gain'] = closingprices_df['gain'].apply(lambda x: round(x, decimals))
-                mapped_df.rename(columns={'Short%': 'value', 'TotalVolume': 'size', 'Symbol': 'symbol'}, inplace=True)
+                #
+                mapped_df.rename(columns={'Short%': 'value', 'TotalVolume': 'size','Symbol': 'symbol'}, inplace=True)
                 mapped_df = mapped_df[mapped_df.name != '']
-                mapped_df['gain'] = 0
                 final_df = mapped_df
-                # final_df = pd.merge(mapped_df, closingprices_df, on='symbol')
-                # print("Closing Prices DF ...", closingprices_df)
+                closingprices_df.rename(columns={'Symbol': 'symbol'}, inplace=True)
+                final_df = pd.merge(mapped_df, closingprices_df, on='symbol')
+                # print("Final DF ...", final_df)
 
             else:
                 finra_df["Short%"] = finra_df["ShortVolume"] / finra_df["TotalVolume"]
@@ -455,6 +353,15 @@ def get_ssdata(startdate, enddate=0, minvol=5000000, percshort=50.00, etfs=0):
                 # final_df.to_csv(os.path.join(src_dir, data_dir, "SSData.csv"), sep=',', encoding='utf-8', index=False)
                 # print(mapped_df)
                 # writer.save()
+
+
+
+
+
+
+
+
+
 
         except requests.HTTPError as e:
             print(f"[!] Exception caught: {e}{file_date}")
