@@ -37,8 +37,8 @@ body.body-main {
   flex-direction: column;
   align-items: center;
   min-height: 100vh;
-  padding: 40px 20px 80px;
-  gap: 20px;
+  padding: 24px 20px 24px;
+  gap: 16px;
 }
 
 .page-header {
@@ -67,7 +67,7 @@ body.body-main {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  padding: 24px 28px;
+  padding: 18px 28px;
 }
 
 /* ---------------------------------------------------------------------
@@ -226,7 +226,7 @@ body.body-main {
 .treemap-panel {
   display: flex;
   justify-content: center;
-  padding: 24px;
+  padding: 18px;
   overflow-x: auto;
 }
 

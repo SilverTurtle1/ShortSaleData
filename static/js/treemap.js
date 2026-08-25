@@ -280,7 +280,7 @@ const renderJSONTreeMap = (jsonData) => {
     <!--    link: (d, n) => `https://github.com/prefuse/Flare/blob/master/flare/src${n.id}.as`,-->
         tile: d3.treemapBinary,
         width: 1100,
-        height: 900
+        height: 480
    })
    if (typeof oldtreemap === 'undefined') document.getElementById("svg_container").appendChild(treemap);
    else document.getElementById("svg_container").replaceChild(treemap, oldtreemap);
