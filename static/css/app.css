@@ -229,7 +229,7 @@ body.body-main {
 }
 
 #svg_container {
-  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-family: "Roboto", "Helvetica Neue", Helvetica, Arial, sans-serif;
   margin: auto;
   position: relative;
   width: 1200px;
@@ -285,7 +285,7 @@ body.body-main {
 }
 
 #svg_detail {
-  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-family: "Roboto", "Helvetica Neue", Helvetica, Arial, sans-serif;
   margin: auto;
   position: relative;
   width: 800px;

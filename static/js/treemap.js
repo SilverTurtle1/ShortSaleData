@@ -152,7 +152,7 @@ function createTreemap(data, { // data is either tabular (array of objects) or h
       .attr("width", width)
       .attr("height", height)
       .attr("style", "max-width: 100%; height: auto; height: intrinsic;")
-      .attr("font-family", "work sans")
+      .attr("font-family", "Roboto, sans-serif")
       .attr("font-size", 12)
       .attr("font-weight", "light")
       .attr("fill", "white");
