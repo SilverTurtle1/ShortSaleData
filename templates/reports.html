@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <script>
+        // Set before first paint to avoid a flash of the wrong theme.
+        (function() {
+            var stored = localStorage.getItem('theme');
+            var theme = stored || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
+    <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500" rel="stylesheet">
+    <link type="text/css" rel="stylesheet" href="/static/css/app.css">
+    <title>Reports &mdash; FINRA Dark Pool Transactions</title>
+</head>
+<body class="body-main">
+
+<div class="filters">
+    <div class="page-header">
+        <div>
+            <h2>Reports</h2>
+            <p class="lead">Run saved database queries against the FINRA dataset</p>
+        </div>
+        <div class="page-header-actions">
+            <a href="/" class="nav-link">&larr; Dashboard</a>
+            <button id="theme-toggle" class="theme-toggle" type="button"></button>
+        </div>
+    </div>
+
+    <div class="panel reports-panel">
+        <div class="report-tabs" id="report-tabs">
+            {% for key, report in reports.items() %}
+            <button type="button" class="report-tab" data-report="{{ key }}">{{ report.label }}</button>
+            {% endfor %}
+        </div>
+
+        <p class="report-description" id="report-description"></p>
+
+        <form class="report-form" id="report-form">
+            <div class="report-form-fields" id="report-form-fields"></div>
+            <button type="submit" class="btn-run">Run report</button>
+        </form>
+    </div>
+
+    <div class="panel results-panel">
+        <div id="report-status" class="report-status"></div>
+        <div class="report-table-wrap">
+            <table id="report-table" class="report-table"></table>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Embeds the report registry so the frontend can build forms without
+    // a separate round trip.
+    var REPORTS = {{ reports | tojson }};
+</script>
+<script src="/static/js/reports.js"></script>
+<script src="/static/js/theme.js"></script>
+</body>
+</html>

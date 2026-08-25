@@ -3,10 +3,11 @@ import json
 import os
 
 import pandas as pd
-from flask import Flask, render_template, jsonify, session
+from flask import Flask, render_template, jsonify, session, request
 
 from finra import fetch_ssdata_raw, build_ssdata, get_company_name
 from flask_session import Session
+from reports import REPORTS, run_report
 
 # Initiate Flask Application
 app = Flask(__name__)
@@ -105,6 +106,25 @@ def barchart(symbol):
     temp_df['CompanyName'] = get_company_name(symbol)
     finra_detail = temp_df.to_json(orient='records')
     return finra_detail
+
+
+@app.route('/reports')
+def reports_page():
+    return render_template('reports.html', reports=REPORTS)
+
+
+@app.route('/reports/run/<report_key>')
+def reports_run(report_key):
+    if report_key not in REPORTS:
+        return jsonify({"error": "Unknown report"}), 404
+
+    try:
+        param_names = [p["name"] for p in REPORTS[report_key]["params"]]
+        raw_params = {name: request.args.get(name) for name in param_names}
+        columns, rows = run_report(report_key, raw_params)
+        return jsonify({"columns": columns, "rows": rows})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
 
 
 @app.route('/get-json', methods=['GET', 'POST'])
