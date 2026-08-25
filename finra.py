@@ -71,13 +71,7 @@ def index_level_dtypes(df):
 
 
 def get_engine(user, passwd, host, port, db):
-
     url = f"postgresql://{user}:{passwd}@{host}:{port}/{db}"
-    # url = f"postgresql://pguser:zmfLzC3hqRf43N5abIpIbdkmllswE9Hj@dpg-ct6h009u0jms7396hdkg-a.oregon-postgres.render.com/alpha_flsq"
-    #if not database_exists(url):
-    #    create_database(url)
-    #postgresql://pguser:zmfLzC3hqRf43N5abIpIbdkmllswE9Hj@dpg-ct6h009u0jms7396hdkg-a.oregon-postgres.render.com/alpha_flsq
-    #postgresql://pguser:zmfLzC3hqRf43N5abIpIbdkmllswE9Hj@dpg-ct6h009u0jms7396hdkg-a/alpha_flsq
     engine = create_engine(
         url,
         pool_size=50, echo=False)
@@ -85,6 +79,15 @@ def get_engine(user, passwd, host, port, db):
 
 
 def get_engine_from_settings():
+    # Render auto-populates DATABASE_URL when a database is linked to the
+    # service, and keeps it in sync if the password is ever rotated from
+    # the Render side, so prefer it over the individual PG_RENDER_* vars.
+    database_url = os.environ.get('DATABASE_URL')
+    if database_url:
+        if database_url.startswith('postgres://'):
+            database_url = database_url.replace('postgres://', 'postgresql://', 1)
+        return create_engine(database_url, pool_size=50, echo=False)
+
     keys = ['pguser', 'pgpasswd', 'pghost', 'pgport', 'pgdb']
     if local_db:
         settings = settings_local
