@@ -1,102 +1,95 @@
-
-
-
-
 function createBarChart(data) {
+  const margin = {top: 16, right: 30, bottom: 36, left: 90},
+      width = 800 - margin.left - margin.right,
+      height = 400 - margin.top - margin.bottom;
 
+  const colors = {ShortVolume: "#e15759", LongVolume: "#4f5df4"};
+  const volgroups = ["ShortVolume", "LongVolume"];
+  const dates = data.map(d => d.Date);
 
-// set the dimensions and margins of the graph
-var margin = {top: 20, right: 30, bottom: 100, left: 90},
-    width = 800 - margin.left - margin.right,
-    height = 400 - margin.top - margin.bottom;
+  const svg = d3.create("svg")
+      .attr("width", width + margin.left + margin.right)
+      .attr("height", height + margin.top + margin.bottom)
+      .attr("font-family", "Roboto, sans-serif");
 
-// create the svg object to the body of the page
-var svg = d3.create("svg")
-    .attr("width", width + margin.left + margin.right)
-    .attr("height", height + margin.top + margin.bottom);
+  const chart = svg.append("g")
+      .attr("transform", `translate(${margin.left},${margin.top})`);
 
-svg.append("g")
-    .attr("transform",
-          "translate(" + margin.left + "," + margin.top + ")");
+  const x = d3.scaleLinear()
+      .domain([0, d3.max(data, d => d.TotalVolume)])
+      .range([0, width]);
 
- const volgroups = ["ShortVolume", "LongVolume"]
- const dates = data.map(d => (d.Date))
+  const y = d3.scaleBand()
+      .range([0, height])
+      .domain(dates)
+      .padding(0.25);
 
+  const color = d3.scaleOrdinal().domain(volgroups).range(volgroups.map(k => colors[k]));
 
-  // Add X axis
-  var x = d3.scaleLinear()
-    .domain([0, d3.max(data, function(d) { return d.TotalVolume; })])
-    .range([ 0, width]);
+  // Light gridlines read as more contemporary than solid black axis
+  // lines, and they make it easier to read a bar's value at a glance.
+  chart.append("g")
+      .attr("stroke", "#e3e5ea")
+      .selectAll("line")
+      .data(x.ticks(6))
+      .join("line")
+        .attr("x1", d => x(d))
+        .attr("x2", d => x(d))
+        .attr("y1", 0)
+        .attr("y2", height);
 
-    var x_axis = d3.axisBottom(x)
-        .tickFormat(x => `${(x/1000000).toFixed(1)}M`);
+  chart.append("g")
+      .attr("transform", `translate(0,${height})`)
+      .call(d3.axisBottom(x).ticks(6).tickFormat(d => `${(d / 1000000).toFixed(1)}M`))
+      .call(g => g.select(".domain").remove())
+      .call(g => g.selectAll("line").remove())
+      .call(g => g.selectAll("text").attr("fill", "#6b7180").attr("font-size", 11));
 
-  svg.append("g")
-    .attr("transform", "translate(70," + height + ")")
-    .call(x_axis)
-    .selectAll("text")
-      .attr("transform", "translate(-10,0)rotate(-45)")
-      .style("text-anchor", "end");
+  chart.append("g")
+      .call(d3.axisLeft(y))
+      .call(g => g.select(".domain").remove())
+      .call(g => g.selectAll("line").remove())
+      .call(g => g.selectAll("text").attr("fill", "#6b7180").attr("font-size", 11));
 
-  // Y axis
-  var y = d3.scaleBand()
-    .range([ 0, height ])
-    .domain(dates)
-    .padding(.02);
+  const stackedData = d3.stack().keys(volgroups)(data);
 
-  svg.append("g")
-    .attr("transform", "translate(70,0)")//magic number, change it at will
-    .call(d3.axisLeft(y))
-
-//svg.append("text")
-//   .attr("x", width/2)
-//   .attr("y", 10)
-//   .attr("text-anchor", "middle")
-//   .style("font-size", "16px")
-//   .text("Awesome Barchart");
-
-  const color = d3.scaleOrdinal()
-    .domain(volgroups)
-    .range(['#377eb8', '#69b3a2'])
-
-  const stackedData = d3.stack()
-    .keys(volgroups)
-    (data)
-
- svg.append("g")
-    .selectAll("g")
-    .data(stackedData)
-    .join("g")
+  chart.append("g")
+      .selectAll("g")
+      .data(stackedData)
+      .join("g")
         .attr("fill", d => color(d.key))
-        .selectAll("rect")
-        .data(d => d)
-        .join("rect")
-            .attr("y", d => y(d.data.Date))
-            .attr("height", Math.min(y.bandwidth(), 40) )
-            .attr("transform", "translate(70,0)")
-            .attr("x", x(0) )
-            .attr("width", function(d) { return x(0); })
+      .selectAll("rect")
+      .data(d => d)
+      .join("rect")
+        .attr("y", d => y(d.data.Date))
+        .attr("height", y.bandwidth())
+        .attr("x", d => x(d[0]))
+        .attr("width", d => x(d[1]) - x(d[0]));
 
-    // Animation
-    svg.selectAll("rect")
-      .transition()
-      .duration(1000)
-      .attr("x", d => x(d[0]) )
-      .attr("width", function(d) { return x(d[1]) - x(d[0]); })
-      .delay(function(d,i){return(i*100)})
+  // Simple inline swatches instead of pulling in the d3-legend plugin
+  // just for two colored squares.
+  const legend = svg.append("g")
+      .attr("transform", `translate(${margin.left}, ${height + margin.top + 28})`)
+      .attr("font-size", 12);
 
-    var legend = d3.legendColor()
-        .shape("path", d3.symbol().type(d3.symbolTriangle).size(100)())
-        .shapePadding(20)
-        .scale(color)
-//        .orient("horizontal");
-    svg.append("g")
-        .attr("transform", "translate(70, 350)")
-        .attr("class", "legendOrdinal")
-        .call(legend);
+  const legendItems = legend.selectAll("g")
+      .data(volgroups)
+      .join("g")
+        .attr("transform", (d, i) => `translate(${i * 130}, 0)`);
 
-    return Object.assign(svg.node());
+  legendItems.append("rect")
+      .attr("width", 11)
+      .attr("height", 11)
+      .attr("rx", 2)
+      .attr("fill", d => color(d));
 
+  legendItems.append("text")
+      .attr("x", 18)
+      .attr("y", 10)
+      .attr("fill", "#1a1d29")
+      .text(d => d === "ShortVolume" ? "Short Volume" : "Long Volume");
+
+  return svg.node();
 }
 
 const renderJSONBarChart = (jsonData) => {
