@@ -15,23 +15,19 @@ const treemapColorRange = ["#1984c5", "#22a7f0", "#63bff0", "#a7d5ed", "#e2e2e2"
 const treemapRange = [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
 
 function shadeColor(color, percent) {
-          var R = parseInt(color.substring(1,3),16);
-          var G = parseInt(color.substring(3,5),16);
-          var B = parseInt(color.substring(5,7),16);
+          // The treemap's color scale outputs "rgb(r, g, b)" strings, not
+          // "#rrggbb" hex -- parsing that as hex here used to silently
+          // produce garbage (NaN channels clamped to 255) and render every
+          // hover as solid yellow regardless of the node's actual color.
+          // d3.color() parses either format correctly.
+          var c = d3.rgb(color);
+          if (!c) return color;
 
-          R = parseInt(R * (100 + percent) / 100);
-          G = parseInt(G * (100 + percent) / 100);
-          B = parseInt(B * (100 + percent) / 100);
+          c.r = Math.min(255, Math.max(0, Math.round(c.r * (100 + percent) / 100)));
+          c.g = Math.min(255, Math.max(0, Math.round(c.g * (100 + percent) / 100)));
+          c.b = Math.min(255, Math.max(0, Math.round(c.b * (100 + percent) / 100)));
 
-          R = (R<255)?R:255;
-          G = (G<255)?G:255;
-          B = (B<255)?B:255;
-
-          var RR = ((R.toString(16).length==1)?"0"+R.toString(16):R.toString(16));
-          var GG = ((G.toString(16).length==1)?"0"+G.toString(16):G.toString(16));
-          var BB = ((B.toString(16).length==1)?"0"+B.toString(16):B.toString(16));
-
-          return "#"+RR+GG+BB;
+          return c.formatRgb();
       }
 
 function createTreemap(data, { // data is either tabular (array of objects) or hierarchy (nested objects)
