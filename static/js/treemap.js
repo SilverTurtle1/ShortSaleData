@@ -14,6 +14,50 @@ const percentColors = [ '#7acc33 ', '#3d8c40', '#f44336', '#7a221b ' ]
 const treemapColorRange = ["#1984c5", "#22a7f0", "#63bff0", "#a7d5ed", "#e2e2e2", "#e1a692", "#de6e56", "#e14b31", "#c23728"]
 const treemapRange = [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
 
+// Groups the treemap by short-volume % range instead of by ETF, so
+// symbols with an extreme value cluster together in one region instead
+// of being scattered across whichever fund they happen to belong to.
+const percentBuckets = [
+  { id: "70%+",    min: 0.70, max: Infinity },
+  { id: "55-70%",  min: 0.55, max: 0.70 },
+  { id: "45-55%",  min: 0.45, max: 0.55 },
+  { id: "30-45%",  min: 0.30, max: 0.45 },
+  { id: "<30%",    min: -Infinity, max: 0.30 },
+];
+const percentBucketOrder = percentBuckets.map(b => b.id);
+
+function percentBucketId(value) {
+  const bucket = percentBuckets.find(b => value >= b.min && value < b.max)
+    || percentBuckets[percentBuckets.length - 1];
+  return bucket.id;
+}
+
+// Keeps buckets in a fixed, meaningful order (highest short% first)
+// regardless of how much volume sits in each one, while still sorting
+// symbols within a bucket by size like the default treemap behavior.
+function bucketAwareSort(a, b) {
+  if (a.depth === 1 && b.depth === 1) {
+    // d3.stratify's synthetic ids for path-based hierarchies carry a
+    // leading "/" (e.g. "/45-55%"), which won't match percentBucketOrder
+    // as-is.
+    const aId = a.id.replace(/^\/+/, "");
+    const bId = b.id.replace(/^\/+/, "");
+    return percentBucketOrder.indexOf(aId) - percentBucketOrder.indexOf(bId);
+  }
+  return d3.descending(a.value, b.value);
+}
+
+// treemapBinary optimizes for balanced aspect ratios, which can place
+// groups in a different visual order than they were sorted in -- fine
+// for a generic treemap, but it defeats "always look in the same place
+// for extreme values." Force the top-level buckets into strict
+// left-to-right columns (matching bucketAwareSort's order), and let
+// treemapBinary keep doing its usual (better-looking) job for the
+// symbols tiled within each bucket.
+function bucketAwareTile(node, x0, y0, x1, y1) {
+  (node.depth === 0 ? d3.treemapDice : d3.treemapBinary)(node, x0, y0, x1, y1);
+}
+
 function shadeColor(color, percent) {
           // The treemap's color scale outputs "rgb(r, g, b)" strings, not
           // "#rrggbb" hex -- parsing that as hex here used to silently
@@ -54,9 +98,15 @@ function createTreemap(data, { // data is either tabular (array of objects) or h
   marginBottom = margin, // bottom margin, in pixels
   marginLeft = margin, // left margin, in pixels
   padding = 2, // shorthand for inner and outer padding
-  paddingInner = padding, // to separate a node from its adjacent siblings
+  // Wider gap between top-level groups (e.g. percent-range buckets) than
+  // between individual leaves within a group, so groups read as visually
+  // distinct sections instead of blending into one tiled surface.
+  paddingInner = (node) => node.depth === 0 ? 14 : padding, // to separate a node from its adjacent siblings
   paddingOuter = padding, // shorthand for top, right, bottom, and left padding
-  paddingTop = paddingOuter, // to separate a node’s top edge from its children
+  // Reserves a header band at the top of each top-level group's own box
+  // (depth 1) for its label, so the label sits in blank space instead of
+  // being hidden behind (or clipped above) the group's leaf cells.
+  paddingTop = (node) => node.depth === 1 ? 18 : paddingOuter, // to separate a node’s top edge from its children
   paddingRight = paddingOuter, // to separate a node’s right edge from its children
   paddingBottom = paddingOuter, // to separate a node’s bottom edge from its children
   paddingLeft = paddingOuter, // to separate a node’s left edge from its children
@@ -152,6 +202,33 @@ function createTreemap(data, { // data is either tabular (array of objects) or h
       .attr("font-size", 12)
       .attr("font-weight", "light")
       .attr("fill", "white");
+
+  // Draw a frame + label behind each top-level group (e.g. percent-range
+  // bucket) so groups read as distinct sections instead of one seamless
+  // tiled surface -- the extra paddingInner above only creates the gap,
+  // this is what makes the boundary and its meaning actually visible.
+  if (root.children && root.children.length > 1) {
+    const groups = svg.append("g").attr("fill", "none");
+    groups.selectAll("rect")
+      .data(root.children)
+      .join("rect")
+        .attr("x", d => d.x0)
+        .attr("y", d => d.y0)
+        .attr("width", d => d.x1 - d.x0)
+        .attr("height", d => d.y1 - d.y0)
+        .attr("stroke", "#c7cad1")
+        .attr("stroke-width", 1);
+
+    svg.append("g")
+      .attr("fill", "#6b7180")
+      .attr("font-weight", "500")
+      .selectAll("text")
+      .data(root.children)
+      .join("text")
+        .attr("x", d => d.x0 + 4)
+        .attr("y", d => d.y0 + 12)
+        .text(d => d.id.replace(/^\/+/, ""));
+  }
 
   const node = svg.selectAll("a")
     .data(leaves)
@@ -268,17 +345,22 @@ const renderJSONTreeMap = (jsonData) => {
     var treemapData = jsonData[0]
 
     treemap = createTreemap(jsonData, {
-        path: d => d.name.replace(/\./g, "/"),
+        // Group by short% range (not by ETF/Fund) so extreme values
+        // cluster together in one region of the treemap. The full
+        // "Fund.Symbol" name is kept as the leaf's path segment so two
+        // symbols in different funds never collide on the same path.
+        path: d => percentBucketId(d.value) + "/" + d.name,
         size: d => d?.size, // size of each node (file); null for internal nodes (folders)
         value: d => d?.value, // value attribute of each node (file); null for internal nodes (folders)
         symbol: d => d?.symbol,
         gain: d=> d?.gain,
         group: d => d.name.split(".")[0], // e.g., "animate" in "flare.animate.Easing"; for color
+        sort: bucketAwareSort,
     <!--    label: (d, n) => [...d.name.split(".").pop().split(/(?=[A-Z][a-z])/g), n.value.toLocaleString("en"), d?.value].join("\n"),-->
         label: (d, n) => [...d.name.split(".").pop().split(/(?=[A-Z][a-z])/g), d?.value].join("\n"),
         title: (d, n) => `ETF: ${d.name.split(".")[0]}\n% Short: ${parseFloat(d.value.toLocaleString("en")*100).toFixed(0)+"%"}\nVolume: ${d.size.toLocaleString("en")}\n% Return: ${parseFloat(d.gain*100).toFixed(1)+"%"}`, // text to show on hover
     <!--    link: (d, n) => `https://github.com/prefuse/Flare/blob/master/flare/src${n.id}.as`,-->
-        tile: d3.treemapBinary,
+        tile: bucketAwareTile,
         width: 1100,
         height: 480
    })
