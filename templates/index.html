@@ -94,13 +94,29 @@
         <p>Min Daily Total Volume: <span id="minvol"></span></p>
     </div>
     <script>
+        // Range inputs fire oninput on every step crossed while dragging
+        // (often a dozen+ times per second), and each call to loadData()
+        // does a network round trip plus a full treemap rebuild. Debounce
+        // so we only reload once the user pauses, not on every tick.
+        function debounce(fn, delayMs) {
+            var timeoutId;
+            return function() {
+                clearTimeout(timeoutId);
+                timeoutId = setTimeout(fn, delayMs);
+            };
+        }
+        // loadData() is declared in a later <script> block, so wrap it in
+        // a closure rather than pass it directly -- debounce() would
+        // otherwise capture `undefined` before that block has run.
+        var debouncedLoadData = debounce(function() { loadData(); }, 200);
+
         var slider = document.getElementById("volslider");
         var output = document.getElementById("minvol");
         output.innerHTML = slider.value;
 
         slider.oninput = function() {
           output.innerHTML = this.value;
-          loadData();
+          debouncedLoadData();
         }
 
         var percslider = document.getElementById("percslider");
@@ -109,7 +125,7 @@
 
         percslider.oninput = function() {
           percoutput.innerHTML = this.value;
-          loadData();
+          debouncedLoadData();
         }
     </script>
     <div id="checkboxes">
