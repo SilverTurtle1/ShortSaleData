@@ -18,10 +18,9 @@ const treemapRange = [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
 // symbols with an extreme value cluster together in one region instead
 // of being scattered across whichever fund they happen to belong to.
 const percentBuckets = [
-  { id: "70%+",    min: 0.70, max: Infinity },
-  { id: "55-70%",  min: 0.55, max: 0.70 },
-  { id: "45-55%",  min: 0.45, max: 0.55 },
-  { id: "30-45%",  min: 0.30, max: 0.45 },
+  { id: "50%+",    min: 0.50, max: Infinity },
+  { id: "40-50%",  min: 0.40, max: 0.50 },
+  { id: "30-40%",  min: 0.30, max: 0.40 },
   { id: "<30%",    min: -Infinity, max: 0.30 },
 ];
 const percentBucketOrder = percentBuckets.map(b => b.id);
