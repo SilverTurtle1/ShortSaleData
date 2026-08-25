@@ -11,8 +11,24 @@ var rectColor = d3.local();
 //#f44336 - bright red
 
 const percentColors = [ '#7acc33 ', '#3d8c40', '#f44336', '#7a221b ' ]
-const treemapColorRange = ["#1984c5", "#22a7f0", "#63bff0", "#a7d5ed", "#e2e2e2", "#e1a692", "#de6e56", "#e14b31", "#c23728"]
+
+// Two separate diverging scales, not one palette flipped -- a "neutral"
+// midpoint that's near-white (right, for a light --panel-bg) reads as a
+// glaring blown-out box against a dark one, and colors tuned for
+// contrast against white generally look washed out against black. The
+// dark variant keeps the same blue(high short%)-to-red(low short%)
+// direction but a dark slate midpoint and brighter, more saturated ends.
+const treemapColorRangeLight = ["#1984c5", "#22a7f0", "#63bff0", "#a7d5ed", "#e2e2e2", "#e1a692", "#de6e56", "#e14b31", "#c23728"]
+const treemapColorRangeDark  = ["#4fb8ff", "#6cc4fa", "#93d4f7", "#bfe3f5", "#5b5f6e", "#e0ab97", "#e78a6a", "#ef6c48", "#f8532f"]
 const treemapRange = [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
+
+function isDarkTheme() {
+  return document.documentElement.getAttribute("data-theme") === "dark";
+}
+
+function currentTreemapColorRange() {
+  return isDarkTheme() ? treemapColorRangeDark : treemapColorRangeLight;
+}
 
 // Groups the treemap by short-volume % range instead of by ETF, so
 // symbols with an extreme value cluster together in one region instead
@@ -161,7 +177,7 @@ function createTreemap(data, { // data is either tabular (array of objects) or h
     d3.scaleLinear()
 //        .domain(["strong buy", "buy", "strong sell", "sell"])
         .domain(treemapRange)
-        .range(treemapColorRange)
+        .range(currentTreemapColorRange())
   );
 
 
@@ -215,11 +231,11 @@ function createTreemap(data, { // data is either tabular (array of objects) or h
         .attr("y", d => d.y0)
         .attr("width", d => d.x1 - d.x0)
         .attr("height", d => d.y1 - d.y0)
-        .attr("stroke", "#c7cad1")
+        .attr("stroke", "var(--border)")
         .attr("stroke-width", 1);
 
     svg.append("g")
-      .attr("fill", "#6b7180")
+      .attr("fill", "var(--text-muted)")
       .attr("font-weight", "500")
       .selectAll("text")
       .data(root.children)
@@ -325,7 +341,7 @@ function createTreemap(data, { // data is either tabular (array of objects) or h
         .attr("fill-opacity", (d, i, D) => i === D.length - 1 ? 0.7 : null)
         .text((d, i, D) => i === D.length - 1 ? parseFloat(d*100).toFixed(0)+"%" : d)
         .attr("font-size", (d, i, D) => i === D.length - 2 ? 16: 12)
-        .style("fill", (d, i, D) => i === D.length - 1 ? "black": "black");
+        .style("fill", "var(--text)");
   }
   return Object.assign(svg.node(), {scales: {color}});
 }

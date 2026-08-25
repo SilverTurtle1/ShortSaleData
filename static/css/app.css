@@ -16,6 +16,24 @@
   --radius-sm: 6px;
 }
 
+/* Dark theme: not just an inversion. The near-white neutral midpoint
+   the treemap/chart colors assume against a light --panel-bg has no
+   equivalent here, and flat-inverted colors read as muddy/low-contrast
+   on black -- see treemap.js/barchart.js for the parallel dark color
+   palettes those SVGs pick between at render time. */
+:root[data-theme="dark"] {
+  --bg: #0f1117;
+  --panel-bg: #171a23;
+  --border: #2b2e3a;
+  --text: #e8e9ed;
+  --text-muted: #9aa0ae;
+  --text-faint: #6b7180;
+  --accent: #7c86ff;
+  --accent-hover: #6670e8;
+  --accent-soft: rgba(124, 134, 255, 0.16);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -44,7 +62,32 @@ body.body-main {
 .page-header {
   width: 100%;
   max-width: 1200px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   text-align: left;
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel-bg);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.12s ease, color 0.12s ease;
+}
+
+.theme-toggle:hover {
+  border-color: var(--accent);
+  color: var(--text);
 }
 
 .page-header h2 {
@@ -407,6 +450,93 @@ button {
 
 .daterangepicker .ranges li.active {
   background-color: var(--accent);
+}
+
+/* The date-picker plugin's own CSS hardcodes a white/black light theme
+   throughout (background-color: #fff, color: #000, etc.) with no
+   tokens of its own, so its popup needs an explicit dark override
+   rather than inheriting one for free like the rest of the chrome. */
+:root[data-theme="dark"] .daterangepicker {
+  background-color: var(--panel-bg);
+  border-color: var(--border);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+:root[data-theme="dark"] .daterangepicker:before {
+  border-bottom-color: var(--border);
+}
+
+:root[data-theme="dark"] .daterangepicker:after {
+  border-bottom-color: var(--panel-bg);
+}
+
+:root[data-theme="dark"] .daterangepicker .calendar-table {
+  background-color: var(--panel-bg);
+  border-color: var(--border);
+}
+
+:root[data-theme="dark"] .daterangepicker .calendar-table th,
+:root[data-theme="dark"] .daterangepicker .calendar-table td {
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .daterangepicker td.off,
+:root[data-theme="dark"] .daterangepicker td.off.in-range,
+:root[data-theme="dark"] .daterangepicker td.off.start-date,
+:root[data-theme="dark"] .daterangepicker td.off.end-date {
+  background-color: var(--panel-bg);
+  color: var(--text-faint);
+}
+
+:root[data-theme="dark"] .daterangepicker td.available:hover,
+:root[data-theme="dark"] .daterangepicker th.available:hover {
+  background-color: var(--border);
+}
+
+:root[data-theme="dark"] .daterangepicker td.disabled,
+:root[data-theme="dark"] .daterangepicker option.disabled {
+  color: var(--text-faint);
+}
+
+:root[data-theme="dark"] .daterangepicker select.monthselect,
+:root[data-theme="dark"] .daterangepicker select.yearselect,
+:root[data-theme="dark"] .daterangepicker select.hourselect,
+:root[data-theme="dark"] .daterangepicker select.minuteselect,
+:root[data-theme="dark"] .daterangepicker select.secondselect,
+:root[data-theme="dark"] .daterangepicker select.ampmselect {
+  background-color: var(--bg);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .daterangepicker .ranges li {
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .daterangepicker .ranges li:hover {
+  background-color: var(--border);
+}
+
+:root[data-theme="dark"] .daterangepicker .drp-buttons {
+  border-top-color: var(--border);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .daterangepicker .drp-selected {
+  color: var(--text-muted);
+}
+
+:root[data-theme="dark"] .daterangepicker .drp-buttons .btn {
+  background-color: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+:root[data-theme="dark"] .daterangepicker .drp-buttons .btn.cancelBtn {
+  background-color: var(--border);
+  border-color: var(--border);
+  color: var(--text);
 }
 
 /* ---------------------------------------------------------------------

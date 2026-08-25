@@ -12,8 +12,14 @@ function createBarChart(data) {
       width = 640 - margin.left - margin.right,
       height = 340 - margin.top - margin.bottom - 32; // reserve room for the legend
 
-  const shortColor = "#1984c5"; // same blue the treemap uses for high short%
-  const volumeColor = "#e3e5ea";
+  const dark = document.documentElement.getAttribute("data-theme") === "dark";
+  // Matches the treemap's own high-short% blue in each theme (see
+  // treemapColorRangeLight/Dark in treemap.js) so "short" reads as the
+  // same color everywhere in the app, in both themes.
+  const shortColor = dark ? "#3fa9f5" : "#1984c5";
+  const volumeColor = "var(--border)";
+  const gridColor = dark ? "#20222b" : "#eef0f3";
+  const refLineColor = dark ? "#3a3d47" : "#c7cad1";
 
   const svg = d3.create("svg")
       .attr("width", 640)
@@ -38,7 +44,7 @@ function createBarChart(data) {
   // Gridlines at fixed 25% steps so the 50% split point is always
   // directly labeled, not just implied.
   chart.append("g")
-      .attr("stroke", "#eef0f3")
+      .attr("stroke", gridColor)
       .selectAll("line")
       .data([0, 25, 50, 75, 100])
       .join("line")
@@ -48,7 +54,7 @@ function createBarChart(data) {
   chart.append("line")
       .attr("x1", 0).attr("x2", width)
       .attr("y1", yPct(50)).attr("y2", yPct(50))
-      .attr("stroke", "#c7cad1")
+      .attr("stroke", refLineColor)
       .attr("stroke-dasharray", "3,3");
 
   // Total volume, as muted background bars behind the line -- present
@@ -95,7 +101,7 @@ function createBarChart(data) {
       .call(d3.axisBottom(x))
       .call(g => g.select(".domain").remove())
       .call(g => g.selectAll("line").remove())
-      .call(g => g.selectAll("text").attr("fill", "#6b7180").attr("font-size", 10));
+      .call(g => g.selectAll("text").attr("fill", "var(--text-muted)").attr("font-size", 10));
 
   chart.append("g")
       .call(d3.axisLeft(yPct).tickValues([0, 25, 50, 75, 100]).tickFormat(d => d + "%"))
@@ -108,7 +114,7 @@ function createBarChart(data) {
       .call(d3.axisRight(yVol).ticks(4).tickFormat(d => `${(d / 1000000).toFixed(0)}M`))
       .call(g => g.select(".domain").remove())
       .call(g => g.selectAll("line").remove())
-      .call(g => g.selectAll("text").attr("fill", "#9aa0ae").attr("font-size", 10));
+      .call(g => g.selectAll("text").attr("fill", "var(--text-faint)").attr("font-size", 10));
 
   const legendItems = [
     {label: "% Short volume", swatch: "line", color: shortColor},
@@ -138,7 +144,7 @@ function createBarChart(data) {
   legendGroups.append("text")
       .attr("x", 20)
       .attr("y", 10)
-      .attr("fill", "#1a1d29")
+      .attr("fill", "var(--text)")
       .text(d => d.label);
 
   return svg.node();
