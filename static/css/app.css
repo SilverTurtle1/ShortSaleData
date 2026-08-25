@@ -116,7 +116,8 @@ body.body-main {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 9px 12px;
-  width: 260px;
+  width: 100%;
+  max-width: 260px;
   outline: none;
   transition: border-color 0.15s ease;
 }
@@ -131,7 +132,8 @@ body.body-main {
 .filter-field input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
-  width: 220px;
+  width: 100%;
+  max-width: 220px;
   height: 4px;
   border-radius: 2px;
   background: var(--border);
@@ -232,7 +234,18 @@ body.body-main {
   font-family: "Roboto", "Helvetica Neue", Helvetica, Arial, sans-serif;
   margin: auto;
   position: relative;
-  width: 1200px;
+  width: 100%;
+  max-width: 1200px;
+}
+
+/* The treemap's <svg> carries its own viewBox + max-width:100% inline
+   (see treemap.js), so letting this container shrink lets the whole
+   chart scale down proportionally on narrow screens instead of just
+   clipping or scrolling. */
+#svg_container svg {
+  display: block;
+  width: 100%;
+  height: auto;
 }
 
 #svg_container .node {
@@ -254,6 +267,7 @@ body.body-main {
   width: 860px;
   max-width: calc(100vw - 40px);
   height: 600px;
+  max-height: calc(100vh - 40px);
   background: var(--panel-bg);
   border: 1px solid var(--border);
   padding: 24px 28px;
@@ -264,6 +278,7 @@ body.body-main {
   box-shadow: 0 20px 60px rgba(20, 22, 35, 0.25);
   border-radius: var(--radius);
   z-index: 1000;
+  overflow: auto;
 }
 
 .modal .flex {
@@ -392,4 +407,36 @@ button {
 
 .daterangepicker .ranges li.active {
   background-color: var(--accent);
+}
+
+/* ---------------------------------------------------------------------
+   Small screens
+--------------------------------------------------------------------- */
+@media (max-width: 640px) {
+  .filters {
+    padding: 20px 12px 48px;
+    gap: 14px;
+  }
+
+  .panel {
+    padding: 18px 16px;
+  }
+
+  .filter-row {
+    gap: 20px;
+  }
+
+  .filter-field {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .treemap-panel {
+    padding: 12px;
+  }
+
+  .modal {
+    width: calc(100vw - 24px);
+    padding: 18px;
+  }
 }
