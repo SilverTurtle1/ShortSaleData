@@ -1,0 +1,395 @@
+/* ---------------------------------------------------------------------
+   Design tokens
+--------------------------------------------------------------------- */
+:root {
+  --bg: #f4f5f7;
+  --panel-bg: #ffffff;
+  --border: #e3e5ea;
+  --text: #1a1d29;
+  --text-muted: #6b7180;
+  --text-faint: #9aa0ae;
+  --accent: #4f5df4;
+  --accent-hover: #3f4bd6;
+  --accent-soft: #eceeff;
+  --shadow: 0 1px 2px rgba(20, 22, 35, 0.04), 0 8px 24px rgba(20, 22, 35, 0.06);
+  --radius: 10px;
+  --radius-sm: 6px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body.body-main {
+  font-family: "Roboto", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg);
+  margin: 0;
+  padding: 0;
+}
+
+/* ---------------------------------------------------------------------
+   Layout shell
+--------------------------------------------------------------------- */
+.filters {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  padding: 40px 20px 80px;
+  gap: 20px;
+}
+
+.page-header {
+  width: 100%;
+  max-width: 1200px;
+  text-align: left;
+}
+
+.page-header h2 {
+  font-size: 22px;
+  font-weight: 500;
+  margin: 0 0 4px;
+  letter-spacing: -0.01em;
+}
+
+.page-header .lead {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.panel {
+  width: 100%;
+  max-width: 1200px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 24px 28px;
+}
+
+/* ---------------------------------------------------------------------
+   Filters panel
+--------------------------------------------------------------------- */
+.filters-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 32px;
+  align-items: flex-start;
+}
+
+.filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 220px;
+}
+
+.filter-field label,
+.filter-field .field-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.filter-field .field-value {
+  font-size: 13px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+#datetimerange-input1 {
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  width: 260px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+#datetimerange-input1:focus {
+  border-color: var(--accent);
+}
+
+/* ---------------------------------------------------------------------
+   Range sliders
+--------------------------------------------------------------------- */
+.filter-field input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 220px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  outline: none;
+  margin: 10px 0 4px;
+}
+
+.filter-field input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--panel-bg);
+  box-shadow: 0 0 0 1px var(--accent);
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.filter-field input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+.filter-field input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--panel-bg);
+  box-shadow: 0 0 0 1px var(--accent);
+  cursor: pointer;
+}
+
+.filter-field input[type="range"]::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+}
+
+/* ---------------------------------------------------------------------
+   ETF checkbox chips
+--------------------------------------------------------------------- */
+#checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+#checkboxes p {
+  display: none;
+}
+
+#checkboxes label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 14px;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.12s ease;
+}
+
+#checkboxes label:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+#checkboxes input[type="checkbox"] {
+  accent-color: var(--accent);
+  margin: 0;
+  cursor: pointer;
+}
+
+#checkboxes label:has(input:checked) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-hover);
+  font-weight: 500;
+}
+
+/* ---------------------------------------------------------------------
+   Treemap panel
+--------------------------------------------------------------------- */
+.treemap-panel {
+  display: flex;
+  justify-content: center;
+  padding: 24px;
+  overflow-x: auto;
+}
+
+#svg_container {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  margin: auto;
+  position: relative;
+  width: 1200px;
+}
+
+#svg_container .node {
+  border: solid 1px var(--panel-bg);
+  font: 10px sans-serif;
+  line-height: 12px;
+  overflow: hidden;
+  position: absolute;
+  text-indent: 2px;
+}
+
+/* ---------------------------------------------------------------------
+   Modal (bar chart detail)
+--------------------------------------------------------------------- */
+.modal {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 860px;
+  max-width: calc(100vw - 40px);
+  height: 600px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  padding: 24px 28px;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 20px 60px rgba(20, 22, 35, 0.25);
+  border-radius: var(--radius);
+  z-index: 1000;
+}
+
+.modal .flex {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modal h3 {
+  font-size: 16px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.modal p {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+#svg_detail {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  margin: auto;
+  position: relative;
+  width: 800px;
+}
+
+#svg_detail .node {
+  border: solid 1px var(--panel-bg);
+  font: 10px sans-serif;
+  line-height: 12px;
+  overflow: hidden;
+  position: absolute;
+  text-indent: 2px;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  font-family: inherit;
+  font-weight: 500;
+}
+
+.btn-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text-muted);
+  border-radius: 50%;
+  font-size: 14px;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.btn-close:hover {
+  background: var(--border);
+  color: var(--text);
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(20, 22, 35, 0.35);
+  backdrop-filter: blur(2px);
+  z-index: 999;
+}
+
+.hidden {
+  display: none;
+}
+
+/* ---------------------------------------------------------------------
+   Loader
+--------------------------------------------------------------------- */
+.loader {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: var(--bg);
+  transition: opacity 0.4s, visibility 0.4s;
+  z-index: 2000;
+}
+
+.loader-hidden {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.loader::after {
+  content: "";
+  width: 42px;
+  height: 42px;
+  border: 4px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: loading 0.7s linear infinite;
+}
+
+@keyframes loading {
+  from { transform: rotate(0turn); }
+  to { transform: rotate(1turn); }
+}
+
+/* ---------------------------------------------------------------------
+   Date range picker accent overrides (base layout comes from
+   vanilla-datetimerange-picker.css)
+--------------------------------------------------------------------- */
+.daterangepicker td.active,
+.daterangepicker td.active:hover {
+  background-color: var(--accent);
+}
+
+.daterangepicker td.in-range {
+  background-color: var(--accent-soft);
+}
+
+.daterangepicker .ranges li.active {
+  background-color: var(--accent);
+}
