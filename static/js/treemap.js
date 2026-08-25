@@ -261,6 +261,14 @@ function createTreemap(data, { // data is either tabular (array of objects) or h
 
 const renderJSONTreeMap = (jsonData) => {
     oldtreemap = document.getElementById("svg_container").childNodes[0]
+
+    if (!Array.isArray(jsonData) || jsonData.length === 0) {
+        // No symbols matched the current filter -- d3.stratify() throws on
+        // zero rows, so clear the existing treemap instead of rendering.
+        if (oldtreemap) document.getElementById("svg_container").removeChild(oldtreemap);
+        return;
+    }
+
     var treemapData = jsonData[0]
 
     treemap = createTreemap(jsonData, {

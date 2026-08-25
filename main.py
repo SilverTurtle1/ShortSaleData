@@ -77,8 +77,13 @@ def treemap(start_date=0, end_date=0, min_vol=5000000, perc_short=50, etfs=0):
         finra_df, finra_detail = finraList
         session['dataDetail'] = finra_detail
 
+        # No symbols matched the current filter -- a normal outcome for a
+        # strict min_vol/perc_short combination, not an error. Return a
+        # valid empty array rather than an {"error": ...} object, since the
+        # latter crashes the treemap renderer (it expects an array) and
+        # triggers the frontend's retry-with-a-different-date-range fallback.
         if finraList == ['[]', '[]']:
-            raise Exception("No data for selected timeframe")
+            return '[]'
 
         temp_df = pd.read_json(finra_df)
         temp_df = temp_df[temp_df["Fund"].isin(list(etfs.split(",")))]
