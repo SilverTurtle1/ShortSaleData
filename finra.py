@@ -17,15 +17,37 @@ from sqlalchemy_utils import database_exists, create_database
 
 from polygon import RESTClient
 
-from local_settings import postgresql_local as settings_local
-from local_settings import postgresql_render as settings_render
-from local_settings import polygonAPIkey as apikey
+try:
+    # local_settings.py is gitignored and only present for local development.
+    from local_settings import postgresql_local as settings_local
+    from local_settings import postgresql_render as settings_render
+    from local_settings import polygonAPIkey as apikey
+except ImportError:
+    # Deployed environments (e.g. Render) configure these as environment
+    # variables instead of shipping a local_settings.py file.
+    settings_local = {
+        'pguser': os.environ.get('PG_LOCAL_USER', 'pguser'),
+        'pgpasswd': os.environ.get('PG_LOCAL_PASSWORD'),
+        'pghost': os.environ.get('PG_LOCAL_HOST', 'localhost'),
+        'pgport': int(os.environ.get('PG_LOCAL_PORT', 5432)),
+        'pgdb': os.environ.get('PG_LOCAL_DB', 'alpha'),
+    }
+    settings_render = {
+        'pguser': os.environ.get('PG_RENDER_USER', 'database_user'),
+        'pgpasswd': os.environ.get('PG_RENDER_PASSWORD'),
+        'pghost': os.environ.get('PG_RENDER_HOST', 'dpg-ct6h009u0jms7396hdkg-a'),
+        'pgport': int(os.environ.get('PG_RENDER_PORT', 5432)),
+        'pgdb': os.environ.get('PG_RENDER_DB', 'alpha_flsq'),
+    }
+    apikey = os.environ.get('POLYGON_API_KEY')
 
 finra_dir = r'https://cdn.finra.org/equity/regsho/daily/CNMSshvol'
 data_dir = r'static/data/'
 mapping_file = 'etfMapping-backup.csv'
 #min_volume = 1  # 5M shares traded daily min
-local_db = True
+# Render sets the RENDER env var on every deployed service, so this picks
+# the Render-hosted Postgres in production and the local one everywhere else.
+local_db = os.environ.get('RENDER') is None
 
 
 def get_csv(url):
