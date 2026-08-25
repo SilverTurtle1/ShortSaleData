@@ -108,15 +108,17 @@ def get_session():
     session = sessionmaker(bind=engine)()
     return session
 
-def get_ssdata(startdate, enddate=0, minvol=5000000, percshort=50.00, etfs=0):
-    #print("Here")
-    #print(percshort)
+def fetch_ssdata_raw(startdate, enddate=0):
+    """Ensure FINRA/Polygon data for the date range is loaded into Postgres,
+    then return the raw, unfiltered per-symbol daily rows for that range.
+
+    This is the expensive part (network + DB) and should only be re-run
+    when the requested date range changes, not on every filter tweak.
+    """
     file_date = re.sub("\/", "", startdate)
     input_date = startdate
     temp_start = startdate
     pd.set_option('display.max_rows', None)
-    finra_df = pd.DataFrame()
-    detail_df = pd.DataFrame()
 
     values = range(0)
     if enddate != 0:
@@ -190,8 +192,6 @@ def get_ssdata(startdate, enddate=0, minvol=5000000, percshort=50.00, etfs=0):
         )
     '''
 
-    src_dir = os.path.dirname(os.path.abspath(__file__))
-
     for d in dates:
         finra_file = finra_dir + f'{d}.txt'
         try:
@@ -252,20 +252,42 @@ def get_ssdata(startdate, enddate=0, minvol=5000000, percshort=50.00, etfs=0):
 
     print("Load the following dates from db ... ", date_list)
     select = text("""
-        SELECT * FROM "FINRAFileDetail" WHERE "Date" IN :datelist AND "TotalVolume" > :minvolume AND CAST("ShortVolume" AS Float)/CAST("TotalVolume" AS Float) >= :shortpercent ORDER BY "Date"
+        SELECT * FROM "FINRAFileDetail" WHERE "Date" IN :datelist ORDER BY "Date"
     """)
-    #AND "ShortVolume/TotalVolume" >= :shortpercent
-    #print("Here 12")
-    select = select.bindparams(datelist=tuple(date_list), minvolume=minvol, shortpercent=(float(percshort)/100))
+    select = select.bindparams(datelist=tuple(date_list))
     print(select)
-    finra_df = pd.read_sql(select, engine)
+    raw_df = pd.read_sql(select, engine)
 
     engine.dispose()  # Close all checked in sessions
 
+    return raw_df
+
+
+def build_ssdata(raw_df, minvol=5000000, percshort=50.00, etfs=0):
+    """Filter/aggregate already-fetched raw FINRA data into the treemap and
+    detail views. Pure in-memory pandas work, no network or DB access, so
+    it's cheap to re-run on every filter (slider) change.
+    """
+    src_dir = os.path.dirname(os.path.abspath(__file__))
+    # Flask route params arrive as strings; the old SQL-side filter let
+    # Postgres coerce them implicitly, but pandas comparisons need explicit
+    # numeric types.
+    minvol = int(minvol)
+    percshort = float(percshort)
+
+    if raw_df.empty:
+        empty = raw_df.to_json(orient='records')
+        return [empty, empty]
+
+    finra_df = raw_df[
+        (raw_df["TotalVolume"] > minvol) &
+        ((raw_df["ShortVolume"] / raw_df["TotalVolume"]) >= (percshort / 100))
+    ].copy()
+
     if finra_df.empty:
         print("Empty DF - return first recent day with data")
-        # return pd.DataFrame()
-        return [finra_df.to_json(orient='records'), finra_df.to_json(orient='records')]
+        empty = finra_df.to_json(orient='records')
+        return [empty, empty]
     yfMaxDate = finra_df["Date"].max()
     # Master df with daily totals that will be used for detailed breakdown
     detail_df = finra_df.copy()
@@ -296,48 +318,24 @@ def get_ssdata(startdate, enddate=0, minvol=5000000, percshort=50.00, etfs=0):
     finra_df = finra_df.groupby('Symbol').sum().reset_index()
     finra_df.sort_values(by=["Date"], inplace=True)
 
-    while True:
-        try:
+    finra_df['Percentile'] = finra_df.TotalVolume.rank(pct=True)
 
-            finra_df['Percentile'] = finra_df.TotalVolume.rank(pct=True)
-            final_df = pd.DataFrame()
+    etf_df = pd.read_csv(os.path.join(src_dir, data_dir, mapping_file))
+    funds = ["SPX", "XLB", "XLC", "XLE", "XLF", "XLI", "XLK", "XLP", "XLU", "XLV", "XLY", "XRT", "Other"]
+    if etfs != 0:
+        etf_df = etf_df[etf_df["Fund"].isin(funds)]
 
-            etf_df = pd.read_csv(os.path.join(src_dir, data_dir, mapping_file))
-            funds = ["SPX", "XLB", "XLC", "XLE", "XLF", "XLI", "XLK", "XLP", "XLU", "XLV", "XLY", "XRT", "Other"]
-            if etfs != 0:
-                etf_df = etf_df[etf_df["Fund"].isin(funds)]
+    mapped_df = pd.merge(finra_df, etf_df, on='Symbol')
+    mapped_df["Short%"] = mapped_df["ShortVolume"] / mapped_df["TotalVolume"]
+    mapped_df["name"] = mapped_df["Fund"] + "." + mapped_df["Symbol"]
 
-            etf_symbols = etf_df["Fund"].to_frame()
-            etf_symbols = etf_symbols.drop_duplicates()
+    mapped_df.drop(
+        columns=["Date", "ShortVolume", "ShortExemptVolume", "Name", "% Holding"], inplace=True)
 
-            mapped_df = pd.merge(finra_df, etf_df, on='Symbol')
-            mapped_df["Short%"] = mapped_df["ShortVolume"] / mapped_df["TotalVolume"]
-            mapped_df["name"] = mapped_df["Fund"] + "." + mapped_df["Symbol"]
+    mapped_df['Short%'] = mapped_df['Short%'].apply(lambda x: round(x, decimals))
+    mapped_df.rename(columns={'Short%': 'value', 'TotalVolume': 'size', 'Symbol': 'symbol'}, inplace=True)
+    mapped_df = mapped_df[mapped_df.name != '']
+    closingprices_df.rename(columns={'Symbol': 'symbol'}, inplace=True)
+    final_df = pd.merge(mapped_df, closingprices_df, on='symbol')
 
-            mapped_df.drop(
-                columns=["Date", "ShortVolume", "ShortExemptVolume", "Name", "% Holding"], inplace=True)
-
-            mapped_df['Short%'] = mapped_df['Short%'].apply(lambda x: round(x, decimals))
-            mapped_df.rename(columns={'Short%': 'value', 'TotalVolume': 'size', 'Symbol': 'symbol'}, inplace=True)
-            mapped_df = mapped_df[mapped_df.name != '']
-            closingprices_df.rename(columns={'Symbol': 'symbol'}, inplace=True)
-            final_df = pd.merge(mapped_df, closingprices_df, on='symbol')
-
-
-
-
-
-
-
-
-
-
-        except requests.HTTPError as e:
-            print(f"[!] Exception caught: {e}{file_date}")
-            prior_day = datetime.strptime(file_date, '%Y%m%d') - timedelta(days=1)
-            file_date = prior_day.strftime("%Y%m%d")  # YYmmdd
-            # Ideally we iterate backwards for start date providing most recent ... would then need to update dropdown
-            continue
-        pd.set_option('display.max_columns', 500)
-
-        return [final_df.to_json(orient='records'), detail_df.to_json(orient='records')]
+    return [final_df.to_json(orient='records'), detail_df.to_json(orient='records')]
