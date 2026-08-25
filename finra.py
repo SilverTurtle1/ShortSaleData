@@ -192,10 +192,24 @@ def fetch_ssdata_raw(startdate, enddate=0):
                               )
     metadata.create_all(engine)
 
+    # A date only counts as done if it's a confirmed no-file day
+    # (FileURL IS NULL) or it actually has detail rows -- a date whose
+    # FINRA fetch succeeded (FileURL set) but has zero FINRAFileDetail
+    # rows is stuck mid-pipeline (e.g. the Polygon closing-price step
+    # crashed before writing detail rows) and needs to be re-fetched,
+    # not silently skipped forever. This makes the fetch loop
+    # self-healing for any past date left in that broken state, without
+    # a separate manual cleanup step.
     select = text("""
                 SELECT "Date"
-                FROM "FINRAFiles"
+                FROM "FINRAFiles" f
                 WHERE "Date" IN :date_list
+                AND (
+                    "FileURL" IS NULL
+                    OR EXISTS (
+                        SELECT 1 FROM "FINRAFileDetail" d WHERE d."Date" = f."Date"
+                    )
+                )
                 """)
     select = select.bindparams(date_list=tuple(date_list))
     with engine.begin() as con:
@@ -218,8 +232,12 @@ def fetch_ssdata_raw(startdate, enddate=0):
             ssdata_temp = get_csv(finra_file)
             ssdata_temp.drop(ssdata_temp.tail(1).index, inplace=True)  # drop last n rows
             start_time = time.time()
+            # ON CONFLICT: a date being reprocessed here (e.g. self-healing
+            # a previously broken/incomplete date, see the query above)
+            # already has a FINRAFiles row from the earlier attempt.
             sql = text("""
                 INSERT INTO "FINRAFiles" ("Date", "FileURL") VALUES (:date, :file)
+                ON CONFLICT ("Date") DO UPDATE SET "FileURL" = EXCLUDED."FileURL"
             """)
             sql = sql.bindparams(date=d, file=finra_file)
             #engine.execute(sql)
@@ -266,8 +284,11 @@ def fetch_ssdata_raw(startdate, enddate=0):
             # even after the real file becomes available later -- leaving
             # today unmarked lets a later request this same day retry it.
             if not is_today_pacific(d):
+                # ON CONFLICT: this date may already have a FINRAFiles row
+                # from an earlier broken/incomplete attempt being retried.
                 sql = text("""
                                 INSERT INTO "FINRAFiles" ("Date") VALUES (:date)
+                                ON CONFLICT ("Date") DO UPDATE SET "FileURL" = NULL
                             """)
                 sql = sql.bindparams(date=d)
                 print("In Exception handling")
