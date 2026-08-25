@@ -7,6 +7,8 @@ import yfinance as yf
 from datetime import datetime
 from datetime import timedelta
 
+import pytz
+
 import pandas as pd
 import requests
 
@@ -55,6 +57,15 @@ def get_company_name(symbol):
     etf_df = pd.read_csv(os.path.join(src_dir, data_dir, mapping_file))
     match = etf_df.loc[etf_df["Symbol"] == symbol, "Name"]
     return match.iloc[0] if not match.empty else None
+
+
+def is_today_pacific(yyyymmdd):
+    # FINRA doesn't publish a trading day's short-volume file until
+    # roughly mid-afternoon Pacific time. Comparing in the server's own
+    # timezone (often UTC on a host like Render) would misjudge which
+    # calendar day is actually "today" for a Pacific-time data source.
+    today = datetime.now(pytz.timezone('US/Pacific')).strftime('%Y%m%d')
+    return str(yyyymmdd) == today
 
 
 def get_csv(url):
@@ -235,15 +246,21 @@ def fetch_ssdata_raw(startdate, enddate=0):
             temp_start = input_date
         except requests.HTTPError as e:
             print(f"[!] Exception caught: {e}{d}")
-            # Create entry in db to indicate no file ONLY if date is not today
-            sql = text("""
-                            INSERT INTO "FINRAFiles" ("Date") VALUES (:date)
-                        """)
-            sql = sql.bindparams(date=d)
-            print("In Exception handling")
-            conn.execute(sql)
-            conn.commit()
-            #engine.execute(sql)
+            # Create entry in db to indicate no file ONLY if date is not today.
+            # FINRA's file for the current trading day isn't published until
+            # mid-afternoon Pacific time, so a fetch attempted earlier in the
+            # day fails the same way a weekend/holiday does. Caching that as
+            # a permanent "no file" record would keep skipping today's date
+            # even after the real file becomes available later -- leaving
+            # today unmarked lets a later request this same day retry it.
+            if not is_today_pacific(d):
+                sql = text("""
+                                INSERT INTO "FINRAFiles" ("Date") VALUES (:date)
+                            """)
+                sql = sql.bindparams(date=d)
+                print("In Exception handling")
+                conn.execute(sql)
+                conn.commit()
 
             if numDays == 0:
                 prior_day = datetime.strptime(temp_start, '%Y%m%d') - timedelta(days=1)
