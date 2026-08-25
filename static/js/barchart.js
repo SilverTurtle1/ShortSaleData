@@ -98,7 +98,7 @@ function createBarChart(data) {
 
   chart.append("g")
       .attr("transform", `translate(0,${height})`)
-      .call(d3.axisBottom(x))
+      .call(d3.axisBottom(x).tickFormat(dateTickFormat(sorted)))
       .call(g => g.select(".domain").remove())
       .call(g => g.selectAll("line").remove())
       .call(g => g.selectAll("text").attr("fill", "var(--text-muted)").attr("font-size", 10));
@@ -153,6 +153,29 @@ function createBarChart(data) {
 function parseChartDate(mmddyyyy) {
   const [m, d, y] = mmddyyyy.split("-").map(Number);
   return new Date(y, m - 1, d);
+}
+
+// Repeating the year on every tick ("08-19-2026", "08-20-2026", ...) is
+// redundant noise when the whole range sits in one calendar year, and
+// with more than a handful of dates it's what actually causes the
+// labels to overlap into an unreadable smear. Drop the year entirely
+// when it doesn't vary across the range; when it does, show it only at
+// the tick(s) where it changes rather than on every single label.
+function dateTickFormat(sortedRows) {
+  const years = sortedRows.map(d => parseChartDate(d.Date).getFullYear());
+  const spansMultipleYears = new Set(years).size > 1;
+  let lastYear = null;
+
+  return function(dateStr) {
+    const date = parseChartDate(dateStr);
+    const monthDay = date.toLocaleDateString("en-US", {month: "short", day: "numeric"});
+    if (!spansMultipleYears) return monthDay;
+
+    const year = date.getFullYear();
+    const showYear = year !== lastYear;
+    lastYear = year;
+    return showYear ? `${monthDay}, ${year}` : monthDay;
+  };
 }
 
 const renderJSONBarChart = (jsonData) => {
