@@ -264,9 +264,9 @@ body.body-main {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  width: 860px;
+  width: 700px;
   max-width: calc(100vw - 40px);
-  height: 600px;
+  height: 460px;
   max-height: calc(100vh - 40px);
   background: var(--panel-bg);
   border: 1px solid var(--border);
@@ -303,7 +303,7 @@ body.body-main {
   font-family: "Roboto", "Helvetica Neue", Helvetica, Arial, sans-serif;
   margin: auto;
   position: relative;
-  width: 800px;
+  width: 640px;
 }
 
 #svg_detail .node {

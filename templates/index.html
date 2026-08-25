@@ -134,6 +134,9 @@
                 .then(function(response){
                     response.json().then(function(response){
                         renderJSONBarChart(response);
+                        var companyName = response.length ? response[0].CompanyName : null;
+                        document.getElementById("modal-subtitle").textContent =
+                            companyName ? `${symbol} — ${companyName}` : symbol;
                     })
                  })
         }
@@ -216,7 +219,10 @@
 
 <section class="modal hidden">
   <div class="flex">
-    <h3>Daily Dealer Volume</h3>
+    <div>
+      <h3>Daily Dealer Volume</h3>
+      <p id="modal-subtitle"></p>
+    </div>
     <button class="btn-close">⨉</button>
   </div>
   <div id="svg_detail"></div>

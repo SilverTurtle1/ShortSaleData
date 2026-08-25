@@ -5,7 +5,7 @@ import os
 import pandas as pd
 from flask import Flask, render_template, jsonify, session
 
-from finra import fetch_ssdata_raw, build_ssdata
+from finra import fetch_ssdata_raw, build_ssdata, get_company_name
 from flask_session import Session
 
 # Initiate Flask Application
@@ -102,6 +102,7 @@ def barchart(symbol):
     temp_df = temp_df.loc[temp_df['Symbol'] == symbol]
     temp_df["Date"] = pd.to_datetime(temp_df["Date"], format='%Y%m%d').dt.strftime('%m-%d-%Y')
     temp_df['Date'] = temp_df['Date'].astype(str)
+    temp_df['CompanyName'] = get_company_name(symbol)
     finra_detail = temp_df.to_json(orient='records')
     return finra_detail
 

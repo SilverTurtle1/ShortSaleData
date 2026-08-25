@@ -1,9 +1,14 @@
 function createBarChart(data) {
-  const margin = {top: 16, right: 30, bottom: 36, left: 90},
-      width = 800 - margin.left - margin.right,
-      height = 400 - margin.top - margin.bottom;
+  // Sized to feel proportionate next to the (now more compact) treemap
+  // above it, rather than dominating the modal.
+  const margin = {top: 16, right: 24, bottom: 64, left: 80},
+      width = 640 - margin.left - margin.right,
+      height = 340 - margin.top - margin.bottom;
 
-  const colors = {ShortVolume: "#e15759", LongVolume: "#4f5df4"};
+  // Reuses the treemap's own diverging blue (high short%) / red (low
+  // short%) endpoints, so blue means "short" consistently across the
+  // whole app instead of an unrelated ad-hoc palette.
+  const colors = {ShortVolume: "#1984c5", LongVolume: "#c23728"};
   const volgroups = ["ShortVolume", "LongVolume"];
   const dates = data.map(d => d.Date);
 
