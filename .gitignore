@@ -1,0 +1,7 @@
+local_settings.py
+flask_session/
+__pycache__/
+*.pyc
+.venv/
+.DS_Store
+.idea/

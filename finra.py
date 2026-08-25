@@ -2,19 +2,17 @@ import io
 import os
 import re
 import time
-from multiprocessing.pool import CLOSE
 
 import yfinance as yf
 from datetime import datetime
 from datetime import timedelta
 
-from importlib.metadata import version
 import pandas as pd
 import requests
 
 from sqlalchemy import MetaData, Table, Column, String, BIGINT, ForeignKey, text, Float
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Relationship, relationship
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy_utils import database_exists, create_database
 
 from polygon import RESTClient
@@ -27,7 +25,7 @@ finra_dir = r'https://cdn.finra.org/equity/regsho/daily/CNMSshvol'
 data_dir = r'static/data/'
 mapping_file = 'etfMapping-backup.csv'
 #min_volume = 1  # 5M shares traded daily min
-local_db = False
+local_db = True
 
 
 def get_csv(url):
@@ -53,7 +51,7 @@ def index_level_dtypes(df):
 def get_engine(user, passwd, host, port, db):
 
     url = f"postgresql://{user}:{passwd}@{host}:{port}/{db}"
-    #url = f"postgresql://pguser:zmfLzC3hqRf43N5abIpIbdkmllswE9Hj@dpg-ct6h009u0jms7396hdkg-a.oregon-postgres.render.com/alpha_flsq"
+    # url = f"postgresql://pguser:zmfLzC3hqRf43N5abIpIbdkmllswE9Hj@dpg-ct6h009u0jms7396hdkg-a.oregon-postgres.render.com/alpha_flsq"
     #if not database_exists(url):
     #    create_database(url)
     #postgresql://pguser:zmfLzC3hqRf43N5abIpIbdkmllswE9Hj@dpg-ct6h009u0jms7396hdkg-a.oregon-postgres.render.com/alpha_flsq
@@ -85,24 +83,6 @@ def get_session():
     session = sessionmaker(bind=engine)()
     return session
 
-def myengine_execute(engine, sql):
-  #If sqlalchemy version starts with 1.4 then do it the old way
-  #print("In Here")
-  sqlalchemy_version = version("sqlalchemy")
-  if sqlalchemy_version.startswith('1.4.'):
-    with engine.connect() as conn:
-        #print("In Here 5")
-        return conn.execute(text(sql))
-  else:
-    #otherwise do it the new way with transactions:
-    with engine.connect() as conn:
-        #print("In Here 6")
-        #print(type(sql))
-        result = conn.execute(sql)
-        #print(result.inserted_primary_key())
-        conn.commit()
-    result = myengine_execute(upd_sql)
-
 def get_ssdata(startdate, enddate=0, minvol=5000000, percshort=50.00, etfs=0):
     #print("Here")
     #print(percshort)
@@ -119,7 +99,6 @@ def get_ssdata(startdate, enddate=0, minvol=5000000, percshort=50.00, etfs=0):
         values = range(numDays + 1)
     else:
         numDays = 0
-    etfOnly = True
     # print(numDays)
 
     dates = []
@@ -191,6 +170,7 @@ def get_ssdata(startdate, enddate=0, minvol=5000000, percshort=50.00, etfs=0):
     for d in dates:
         finra_file = finra_dir + f'{d}.txt'
         try:
+            print(finra_file)
             ssdata_temp = get_csv(finra_file)
             ssdata_temp.drop(ssdata_temp.tail(1).index, inplace=True)  # drop last n rows
             start_time = time.time()
@@ -199,7 +179,6 @@ def get_ssdata(startdate, enddate=0, minvol=5000000, percshort=50.00, etfs=0):
             """)
             sql = sql.bindparams(date=d, file=finra_file)
             #engine.execute(sql)
-            #myengine_execute(engine, sql)
             print("Before Insert into FINRA DB")
 
             conn.execute(sql)
@@ -253,6 +232,7 @@ def get_ssdata(startdate, enddate=0, minvol=5000000, percshort=50.00, etfs=0):
     #AND "ShortVolume/TotalVolume" >= :shortpercent
     #print("Here 12")
     select = select.bindparams(datelist=tuple(date_list), minvolume=minvol, shortpercent=(float(percshort)/100))
+    print(select)
     finra_df = pd.read_sql(select, engine)
 
     engine.dispose()  # Close all checked in sessions
@@ -297,62 +277,26 @@ def get_ssdata(startdate, enddate=0, minvol=5000000, percshort=50.00, etfs=0):
             finra_df['Percentile'] = finra_df.TotalVolume.rank(pct=True)
             final_df = pd.DataFrame()
 
-            if etfOnly:
+            etf_df = pd.read_csv(os.path.join(src_dir, data_dir, mapping_file))
+            funds = ["SPX", "XLB", "XLC", "XLE", "XLF", "XLI", "XLK", "XLP", "XLU", "XLV", "XLY", "XRT", "Other"]
+            if etfs != 0:
+                etf_df = etf_df[etf_df["Fund"].isin(funds)]
 
-                #print("Made it here!")
-                # print(os.path.join(src_dir, mapping_file))
-                etf_df = pd.read_csv(os.path.join(src_dir, data_dir, mapping_file))
-                # print("Mapping File Pre Filter")
-                # print(etfs)
-                funds = ["SPX", "XLB", "XLC", "XLE", "XLF", "XLI", "XLK", "XLP", "XLU", "XLV", "XLY", "XRT", "Other"]
-                if etfs != 0:
-                    # etf_df = etf_df[etf_df["Fund"].isin(list(funds.split(",")))]
-                    etf_df = etf_df[etf_df["Fund"].isin(funds)]
-                    # print("Mapping File Post Filter")
-                    # print(etf_df)
+            etf_symbols = etf_df["Fund"].to_frame()
+            etf_symbols = etf_symbols.drop_duplicates()
 
-                etf_symbols = etf_df["Fund"].to_frame()
-                etf_symbols = etf_symbols.drop_duplicates()
-                # print("ETFs")
-                # print(etf_symbols)
+            mapped_df = pd.merge(finra_df, etf_df, on='Symbol')
+            mapped_df["Short%"] = mapped_df["ShortVolume"] / mapped_df["TotalVolume"]
+            mapped_df["name"] = mapped_df["Fund"] + "." + mapped_df["Symbol"]
 
-                mapped_df = pd.merge(finra_df, etf_df, on='Symbol')
-                mapped_df["Short%"] = mapped_df["ShortVolume"] / mapped_df["TotalVolume"]
-                mapped_df["name"] = mapped_df["Fund"] + "." + mapped_df["Symbol"]
+            mapped_df.drop(
+                columns=["Date", "ShortVolume", "ShortExemptVolume", "Name", "% Holding"], inplace=True)
 
-                mapped_df.drop(
-                    columns=["Date", "ShortVolume", "ShortExemptVolume", "Name", "% Holding"], inplace=True)
-
-                mapped_df['Short%'] = mapped_df['Short%'].apply(lambda x: round(x, decimals))
-                #
-                mapped_df.rename(columns={'Short%': 'value', 'TotalVolume': 'size','Symbol': 'symbol'}, inplace=True)
-                mapped_df = mapped_df[mapped_df.name != '']
-                final_df = mapped_df
-                closingprices_df.rename(columns={'Symbol': 'symbol'}, inplace=True)
-                final_df = pd.merge(mapped_df, closingprices_df, on='symbol')
-                # print("Final DF ...", final_df)
-
-            else:
-                finra_df["Short%"] = finra_df["ShortVolume"] / finra_df["TotalVolume"]
-                finra_df["name"] = "None." + finra_df["Symbol"]
-
-                finra_df.drop(
-                    # columns=['Market', "Date", "ShortVolume", "ShortExemptVolume", "Symbol"],
-                    # inplace=True)
-                    columns=["Date", "ShortVolume", "ShortExemptVolume", "Symbol"], inplace=True)
-                decimals = 2
-                finra_df['Short%'] = finra_df['Short%'].apply(lambda x: round(x, decimals))
-                finra_df = finra_df[finra_df["Short%"] != 0]
-                finra_df.rename(columns={'Short%': 'value', 'TotalVolume': 'size'}, inplace=True)
-                finra_df = finra_df[finra_df.name != '']
-                final_df = finra_df
-
-                # writer = pd.ExcelWriter("SSData.xlsx", engine='xlsxwriter')
-                # ssdata_temp.to_excel(writer,sheet_name=file_date, index=False)
-                # print(os.path.join(src_dir, data_dir, "SSData.csv"))
-                # final_df.to_csv(os.path.join(src_dir, data_dir, "SSData.csv"), sep=',', encoding='utf-8', index=False)
-                # print(mapped_df)
-                # writer.save()
+            mapped_df['Short%'] = mapped_df['Short%'].apply(lambda x: round(x, decimals))
+            mapped_df.rename(columns={'Short%': 'value', 'TotalVolume': 'size', 'Symbol': 'symbol'}, inplace=True)
+            mapped_df = mapped_df[mapped_df.name != '']
+            closingprices_df.rename(columns={'Symbol': 'symbol'}, inplace=True)
+            final_df = pd.merge(mapped_df, closingprices_df, on='symbol')
 
 
 

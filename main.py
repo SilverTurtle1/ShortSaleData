@@ -1,5 +1,6 @@
 import csv
 import json
+import os
 
 import pandas as pd
 from flask import Flask, render_template, jsonify, session
@@ -9,8 +10,15 @@ from flask_session import Session
 
 # Initiate Flask Application
 app = Flask(__name__)
+# Required for signed session cookies; without this Flask-Session issues
+# unsigned session IDs that can be guessed or swapped by a client.
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(24))
 app.config["SESSION_PERMANENT"] = False
 app.config["SESSION_TYPE"] = "filesystem"
+# Flask-Session's filesystem backend does not sign the session-id cookie by
+# default (use_signer=False) even with a secret_key set, which leaves the
+# raw session ID guessable/swappable. This turns signing on.
+app.config["SESSION_USE_SIGNER"] = True
 Session(app)
 
 # Import DataFrame
@@ -92,7 +100,7 @@ def treemap(start_date=0, end_date=0, min_vol=5000000, perc_short=50, etfs=0):
 
         except Exception as e:
             print(e)
-            return finra_df
+            return jsonify({"error": str(e)})
 
     else:
         return jsonify({"error": "Could not load data for " + start_date})
@@ -125,5 +133,5 @@ def get_json():
 
 
 if __name__ == '__main__':
-    # Threaded option to enable multiple instances for multiple user access support
-    app.run(debug=True, port=5000)
+    # threaded=True allows multiple instances for multiple user access support
+    app.run(debug=True, port=5000, threaded=True)
