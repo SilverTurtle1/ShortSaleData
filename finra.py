@@ -18,6 +18,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy_utils import database_exists, create_database
 
 from polygon import RESTClient
+from polygon.exceptions import BadResponse
 
 try:
     # local_settings.py is gitignored and only present for local development.
@@ -227,15 +228,26 @@ def fetch_ssdata_raw(startdate, enddate=0):
             conn.execute(sql)
             conn.commit()
 
-            client = RESTClient(apikey)
-            aggs = client.get_grouped_daily_aggs(f"{d[:4]}-{d[4:6]}-{d[6:]}")
-            data = []
-            for agg in aggs:
-                data.append({
-                    "Symbol": agg.ticker,
-                    "Close": agg.close
-                })
-            polygondf = pd.DataFrame(data)
+            try:
+                client = RESTClient(apikey)
+                aggs = client.get_grouped_daily_aggs(f"{d[:4]}-{d[4:6]}-{d[6:]}")
+                data = []
+                for agg in aggs:
+                    data.append({
+                        "Symbol": agg.ticker,
+                        "Close": agg.close
+                    })
+                polygondf = pd.DataFrame(data)
+            except BadResponse as e:
+                # Polygon rejects grouped-aggregates requests for the
+                # current date until end of day on this account's tier
+                # ("Attempted to request today's data before end of day").
+                # That's unrelated to whether FINRA's own short-volume file
+                # (already fetched successfully above) is available -- fall
+                # back to a closing price of NULL for this date rather than
+                # losing the whole day's short-volume data over it.
+                print(f"[!] Polygon closing prices unavailable for {d}: {e}")
+                polygondf = pd.DataFrame(columns=["Symbol", "Close"])
             mergeddf = pd.merge(polygondf, ssdata_temp, on='Symbol', how='right')
             # print(mergeddf)
             print("Before writing FINRA file to SQL")
