@@ -52,6 +52,12 @@ mapping_file = 'etfMapping-backup.csv'
 # the Render-hosted Postgres in production and the local one everywhere else.
 local_db = os.environ.get('RENDER') is None
 
+# Guards the one-time CREATE INDEX CONCURRENTLY in fetch_ssdata_raw so it
+# only ever runs once per worker process instead of on every request --
+# see the comment at that call site for why running it repeatedly is a
+# real production risk, not just wasted work.
+_finrafiledetail_date_index_ensured = False
+
 
 def get_company_name(symbol):
     src_dir = os.path.dirname(os.path.abspath(__file__))
@@ -220,16 +226,29 @@ def fetch_ssdata_raw(startdate, enddate=0):
         # index=True above has no effect on the FINRAFileDetail table that's
         # already live in production. CONCURRENTLY avoids taking a lock that
         # would block reads/writes on this table while the index builds, and
-        # must run outside of any transaction; IF NOT EXISTS makes every call
-        # after the first one a cheap no-op.
-        index_conn = engine.connect().execution_options(isolation_level="AUTOCOMMIT")
-        try:
-            index_conn.execute(text(
-                'CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_finrafiledetail_date '
-                'ON "FINRAFileDetail" ("Date")'
-            ))
-        finally:
-            index_conn.close()
+        # must run outside of any transaction.
+        #
+        # This must only run ONCE per process, not on every request: Postgres
+        # requires CREATE INDEX CONCURRENTLY to wait for every transaction
+        # that was already open when it started to finish before it can
+        # complete. If a prior worker was ever SIGKILLed (gunicorn's worker
+        # timeout does exactly this) while holding a connection open, that
+        # connection can look "not yet finished" to Postgres for a while
+        # after the process is already gone -- and re-issuing this same
+        # CREATE INDEX on every single request, each potentially getting
+        # killed the same way, is a plausible way to keep compounding
+        # exactly that problem instead of it ever clearing.
+        global _finrafiledetail_date_index_ensured
+        if not _finrafiledetail_date_index_ensured:
+            index_conn = engine.connect().execution_options(isolation_level="AUTOCOMMIT")
+            try:
+                index_conn.execute(text(
+                    'CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_finrafiledetail_date '
+                    'ON "FINRAFileDetail" ("Date")'
+                ))
+            finally:
+                index_conn.close()
+            _finrafiledetail_date_index_ensured = True
 
         # A date only counts as done if it actually has detail rows, or
         # it's a confirmed no-file day that's also a weekend. Two distinct
