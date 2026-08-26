@@ -231,20 +231,33 @@ def fetch_ssdata_raw(startdate, enddate=0):
         finally:
             index_conn.close()
 
-        # A date only counts as done if it's a confirmed no-file day
-        # (FileURL IS NULL) or it actually has detail rows -- a date whose
-        # FINRA fetch succeeded (FileURL set) but has zero FINRAFileDetail
-        # rows is stuck mid-pipeline (e.g. the Polygon closing-price step
-        # crashed before writing detail rows) and needs to be re-fetched,
-        # not silently skipped forever. This makes the fetch loop
-        # self-healing for any past date left in that broken state, without
-        # a separate manual cleanup step.
+        # A date only counts as done if it actually has detail rows, or
+        # it's a confirmed no-file day that's also a weekend. Two distinct
+        # broken states get self-healed here:
+        #  - FileURL set but zero FINRAFileDetail rows: the FINRA fetch
+        #    succeeded but something crashed before writing detail rows
+        #    (e.g. the Polygon closing-price step).
+        #  - FileURL IS NULL on a WEEKDAY: FINRA genuinely has no file for
+        #    weekends, so a null FileURL there is trustworthy forever, but
+        #    the same marker on a weekday means some earlier attempt
+        #    failed for an unrelated/transient reason (queried before
+        #    FINRA published, a network blip, anything before the
+        #    is_today_pacific fix existed) and got permanently
+        #    blacklisted by the old code even though real data exists for
+        #    that trading day. NYSE holidays are the one gap this doesn't
+        #    close -- a real weekday holiday will keep getting retried on
+        #    every request touching it instead of being cached, which
+        #    costs an occasional wasted FINRA/Polygon call but is
+        #    otherwise harmless.
         select = text("""
                     SELECT "Date"
                     FROM "FINRAFiles" f
                     WHERE "Date" IN :date_list
                     AND (
-                        "FileURL" IS NULL
+                        (
+                            "FileURL" IS NULL
+                            AND EXTRACT(ISODOW FROM TO_DATE(CAST("Date" AS TEXT), 'YYYYMMDD')) IN (6, 7)
+                        )
                         OR EXISTS (
                             SELECT 1 FROM "FINRAFileDetail" d WHERE d."Date" = f."Date"
                         )
