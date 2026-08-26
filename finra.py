@@ -342,6 +342,18 @@ def ensure_ssdata_cached(startdate, enddate=0):
         #    every request touching it instead of being cached, which
         #    costs an occasional wasted FINRA/Polygon call but is
         #    otherwise harmless.
+        #  - Detail rows exist but almost none have a Close: Polygon's
+        #    free tier has no same-day data -- a day's prices aren't
+        #    queryable until roughly 8am PT the *next* morning, but the
+        #    daily cron fetches each day same-afternoon (FINRA's own file
+        #    is ready by then, Polygon's isn't), so the day it just
+        #    fetched always gets an all-NULL Close on that first attempt.
+        #    Threshold is 50%, not "any missing", because a small
+        #    fraction of symbols never having Polygon coverage is normal
+        #    and permanent (~2% baseline) -- retrying those forever would
+        #    defeat the cache entirely. A genuinely brand-new date (zero
+        #    existing rows) correctly falls through to NULL here, not 0,
+        #    so it isn't mistaken for "done" either.
         select = text("""
                     SELECT "Date"
                     FROM "FINRAFiles" f
@@ -351,9 +363,10 @@ def ensure_ssdata_cached(startdate, enddate=0):
                             "FileURL" IS NULL
                             AND EXTRACT(ISODOW FROM TO_DATE(CAST("Date" AS TEXT), 'YYYYMMDD')) IN (6, 7)
                         )
-                        OR EXISTS (
-                            SELECT 1 FROM "FINRAFileDetail" d WHERE d."Date" = f."Date"
-                        )
+                        OR (
+                            SELECT COUNT(*) FILTER (WHERE d."Close" IS NOT NULL)::float / NULLIF(COUNT(*), 0)
+                            FROM "FINRAFileDetail" d WHERE d."Date" = f."Date"
+                        ) >= 0.5
                     )
                     """)
         select = select.bindparams(date_list=tuple(date_list))
@@ -428,6 +441,13 @@ def ensure_ssdata_cached(startdate, enddate=0):
                 mergeddf = pd.merge(polygondf, ssdata_temp, on='Symbol', how='right')
                 # print(mergeddf)
                 print("Before writing FINRA file to SQL")
+                # This date may already have detail rows from an earlier
+                # attempt (e.g. the self-heal retry above, for a date that
+                # got an all-NULL Close the first time) -- clear them first
+                # so re-inserting doesn't duplicate every row for the date.
+                # A no-op for a genuinely first-time fetch.
+                conn.execute(text('DELETE FROM "FINRAFileDetail" WHERE "Date" = :date'), {"date": int(d)})
+                conn.commit()
                 mergeddf.to_sql('FINRAFileDetail', con=engine, if_exists='append', index=False)
                 print("to_sql duration: {} seconds".format(time.time() - start_time))
                 # Also load the closing price of the day for each ticker in the FINRA file and update FINRAFileDetail
