@@ -9,16 +9,16 @@ the "This Month" incident: Polygon's free-tier 5 calls/min cap alone can
 force ~12s between calls, which a 30s worker timeout can't absorb for
 more than a couple of missing dates).
 
-fetch_ssdata_raw() already skips any date that's already cached (see the
-self-heal EXISTS check in finra.py), so it's safe to call with the same
-wide window every run -- only the dates actually missing since the last
-run do any real work.
+ensure_ssdata_cached() already skips any date that's already cached (see
+the self-heal EXISTS check in finra.py), so it's safe to call with the
+same wide window every run -- only the dates actually missing since the
+last run do any real work.
 """
 from datetime import datetime, timedelta
 
 import pytz
 
-from finra import fetch_ssdata_raw
+from finra import ensure_ssdata_cached, trim_old_data
 
 # Covers a full "This Month"-sized request plus slack, without making a
 # single cron run walk back further than necessary against the shared
@@ -42,7 +42,16 @@ def main():
     startdate = start.strftime('%Y%m%d')
     enddate = end.strftime('%Y%m%d')
     print(f"Pre-warming cache for {startdate}..{enddate}")
-    fetch_ssdata_raw(startdate, enddate)
+    # Not fetch_ssdata_raw() -- this script only cares about the caching
+    # side effect, and fetch_ssdata_raw()'s final bulk read of the whole
+    # range into one DataFrame would be pure wasted memory here.
+    ensure_ssdata_cached(startdate, enddate)
+
+    # Keeps the table bounded to roughly the same window this script
+    # warms -- letting it grow forever is what filled the production
+    # disk once already.
+    trim_old_data()
+
     print("Done.")
 
 

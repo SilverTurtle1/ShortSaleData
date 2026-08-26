@@ -158,12 +158,52 @@ def get_session():
     session = sessionmaker(bind=engine)()
     return session
 
-def fetch_ssdata_raw(startdate, enddate=0):
-    """Ensure FINRA/Polygon data for the date range is loaded into Postgres,
-    then return the raw, unfiltered per-symbol daily rows for that range.
+
+# Matches Polygon's own free-tier historical cap -- data older than this
+# never has a real closing price anyway (see the BadResponse fallback in
+# fetch_ssdata_raw), so there's little value in keeping it, and letting
+# FINRAFileDetail grow forever is what filled the production disk once
+# already (see the DiskFull incident this was added for).
+DEFAULT_RETENTION_DAYS = 730
+
+
+def trim_old_data(retention_days=DEFAULT_RETENTION_DAYS):
+    """Delete FINRAFiles rows (and their FINRAFileDetail rows, via the
+    existing ON DELETE CASCADE) older than the retention window. Safe to
+    call on every cron run -- if nothing is old enough, this deletes zero
+    rows.
+    """
+    cutoff = (datetime.now(pytz.timezone('US/Pacific')) - timedelta(days=retention_days)).strftime('%Y%m%d')
+    engine = get_engine_from_settings()
+    try:
+        with engine.begin() as conn:
+            result = conn.execute(
+                text('DELETE FROM "FINRAFiles" WHERE "Date" < :cutoff'),
+                {"cutoff": int(cutoff)},
+            )
+            print(f"trim_old_data: removed {result.rowcount} FINRAFiles rows older than {cutoff}")
+    finally:
+        engine.dispose()
+
+
+def ensure_ssdata_cached(startdate, enddate=0):
+    """Ensure FINRA/Polygon data for the date range is loaded into Postgres.
+    Does not return the data -- see fetch_ssdata_raw() for that.
 
     This is the expensive part (network + DB) and should only be re-run
     when the requested date range changes, not on every filter tweak.
+    Callers that only care about the caching side effect (the daily
+    prewarm job, the one-time history backfill) should call this
+    directly rather than fetch_ssdata_raw() -- that additionally does
+    one bulk read of the *entire* requested range's FINRAFileDetail rows
+    into a single DataFrame at the end, which for a wide range (e.g. the
+    2-year backfill) can be millions of rows and multiple GB, and is
+    pure wasted memory if nothing ever uses the returned DataFrame. This
+    is what was actually causing the backfill Cron Job's repeated
+    out-of-memory failures -- not a leak in the per-date fetch loop
+    (which commits incrementally and is genuinely resumable), but this
+    one-shot full-range load running unconditionally at the end every
+    single time, regardless of how few dates were newly fetched.
     """
     file_date = re.sub("\/", "", startdate)
     input_date = startdate
@@ -412,17 +452,42 @@ def fetch_ssdata_raw(startdate, enddate=0):
         #     break
 
         # At this point all FINRA data for selected timeframe is stored in the database
-        # temp_df = ssdata_temp[(ssdata_temp.TotalVolume > min_volume)]
+    finally:
+        engine.dispose()  # Close all checked in sessions -- always, even on error
 
+
+def fetch_ssdata_raw(startdate, enddate=0):
+    """Ensure FINRA/Polygon data for the date range is loaded into Postgres,
+    then return the raw, unfiltered per-symbol daily rows for that range.
+
+    This is what the web app uses -- it needs the actual data back to
+    build a response. Callers that only need the caching side effect
+    should call ensure_ssdata_cached() directly instead; see its
+    docstring for why (this function's final bulk read can be millions
+    of rows for a wide range, wasted if nothing uses the return value).
+    """
+    ensure_ssdata_cached(startdate, enddate)
+
+    # Recomputing date_list here is cheap (pure date arithmetic, no
+    # network/DB cost) and keeps this function's only remaining job --
+    # reading back the now-cached range -- independent of
+    # ensure_ssdata_cached()'s internals.
+    values = range(0)
+    if enddate != 0:
+        numDays = (datetime.strptime(enddate, '%Y%m%d') - datetime.strptime(startdate, '%Y%m%d')).days
+        values = range(numDays + 1)
+    date_list = [(datetime.strptime(startdate, '%Y%m%d') + timedelta(days=i)).strftime('%Y%m%d') for i in values]
+
+    engine = get_engine_from_settings()
+    try:
         print("Load the following dates from db ... ", date_list)
         select = text("""
             SELECT * FROM "FINRAFileDetail" WHERE "Date" IN :datelist ORDER BY "Date"
         """)
         select = select.bindparams(datelist=tuple(date_list))
-        print(select)
         raw_df = pd.read_sql(select, engine)
     finally:
-        engine.dispose()  # Close all checked in sessions -- always, even on error
+        engine.dispose()
 
     return raw_df
 

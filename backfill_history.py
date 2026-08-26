@@ -12,14 +12,14 @@ Command at `python backfill_history.py`, triggering one manual run, and
 switching the Command back to `python prewarm_cache.py` once it
 completes -- this script is not meant to be the job's permanent command.
 
-fetch_ssdata_raw() already skips any date that's already cached, so
+ensure_ssdata_cached() already skips any date that's already cached, so
 this is safe to re-run if it's ever interrupted partway through.
 """
 from datetime import datetime, timedelta
 
 import pytz
 
-from finra import fetch_ssdata_raw
+from finra import ensure_ssdata_cached
 
 BACKFILL_DAYS = 730
 
@@ -34,7 +34,13 @@ def main():
     startdate = start.strftime('%Y%m%d')
     enddate = end.strftime('%Y%m%d')
     print(f"Backfilling {startdate}..{enddate} ({BACKFILL_DAYS} days) -- this can take over an hour.")
-    fetch_ssdata_raw(startdate, enddate)
+    # Not fetch_ssdata_raw() -- this script only needs the caching side
+    # effect. fetch_ssdata_raw()'s final step reads the *entire* range's
+    # FINRAFileDetail rows into one DataFrame, which for 730 days is
+    # potentially millions of rows -- this is what was actually causing
+    # the repeated out-of-memory failures, not a leak in the per-date
+    # loop (which commits incrementally and is genuinely resumable).
+    ensure_ssdata_cached(startdate, enddate)
     print("Done.")
 
 
