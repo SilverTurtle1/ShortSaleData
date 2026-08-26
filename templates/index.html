@@ -296,23 +296,59 @@
     }
     window.addEventListener("load", function (event) {
 
+        // FINRA doesn't publish a trading day's short-volume file until
+        // roughly mid-afternoon Pacific time -- before that, selecting
+        // today always comes back empty, which looks like a bug rather
+        // than the file simply not existing yet. Grey out today (and
+        // drop the "Today" quick-range) until it's actually likely to
+        // have data; once the cutoff passes, it becomes selectable
+        // again without needing a page reload... well, it does need a
+        // reload, since this only runs once at page load, but that's an
+        // acceptable tradeoff for how rarely someone leaves the tab open
+        // across the cutoff.
+        var pacificHour = parseInt(
+            new Date().toLocaleString('en-US', {timeZone: 'America/Los_Angeles', hour: 'numeric', hour12: false}),
+            10
+        );
+        var todayPublished = pacificHour >= 15;
+
+        var pickerRanges = {
+            'Yesterday': [moment().subtract(1, 'days').startOf('day'), moment().subtract(1, 'days').endOf('day')],
+            'Last 7 Days': [moment().subtract(6, 'days').startOf('day'), moment().endOf('day')],
+            'This Month': [moment().startOf('month').startOf('day'), moment().endOf('month').endOf('day')],
+        };
+        if (todayPublished) {
+            pickerRanges = Object.assign(
+                {'Today': [moment().startOf('day'), moment().endOf('day')]},
+                pickerRanges
+            );
+        }
+
         new DateRangePicker('datetimerange-input1',
             {
                 timePicker: true,
-                maxDate: moment().format('MM/DD/YYYY'),
+                maxDate: todayPublished
+                    ? moment().format('MM/DD/YYYY')
+                    : moment().subtract(1, 'days').format('MM/DD/YYYY'),
                 opens: 'left',
-                ranges: {
-                    'Today': [moment().startOf('day'), moment().endOf('day')],
-                    'Yesterday': [moment().subtract(1, 'days').startOf('day'), moment().subtract(1, 'days').endOf('day')],
-                    'Last 7 Days': [moment().subtract(6, 'days').startOf('day'), moment().endOf('day')],
-                    'This Month': [moment().startOf('month').startOf('day'), moment().endOf('month').endOf('day')],
-                },
+                ranges: pickerRanges,
                 locale: {
                     format: "MM/DD/YYYY"
                 }
             },
             function (start, end) {
                 $(document).trigger("loaderEvent");
+                    // The picker library only enforces maxDate for clicks in
+                    // its own calendar UI -- typing a date directly into the
+                    // input and pressing Enter bypasses it entirely. Clamp
+                    // here too so today can't sneak in that way before it's
+                    // published, regardless of which path set it.
+                    var maxAllowed = todayPublished
+                        ? moment().endOf('day')
+                        : moment().subtract(1, 'days').endOf('day');
+                    if (start.isAfter(maxAllowed)) start = maxAllowed.clone();
+                    if (end.isAfter(maxAllowed)) end = maxAllowed.clone();
+
                     daterange['start_date'] = start.format("YYYYMMDD");
                     daterange['end_date'] = end.format("YYYYMMDD");
                     rangeStart = daterange['start_date']
@@ -322,6 +358,7 @@
 
                     populateTreemap( daterange['start_date'], daterange['end_date']);
                     var dateElement = document.getElementById("datetimerange-input1");
+                    dateElement.value = start.format("MM/DD/YYYY") + " - " + end.format("MM/DD/YYYY");
                     document.getElementById("svg_detail").innerHTML = "";
 
             })
