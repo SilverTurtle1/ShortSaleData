@@ -4,6 +4,7 @@
     var currentRows = null;
     var sortColumnIndex = null; // index into the raw `columns` array from the server
     var sortDir = 1; // 1 = ascending, -1 = descending
+    var EXTREME_MULTIPLIER = 3; // highlight ratio columns at or above this
 
     function buildForm(key) {
         var report = REPORTS[key];
@@ -26,13 +27,29 @@
 
             var input = document.createElement('input');
             input.name = param.name;
-            input.type = param.input; // 'date', 'number', or 'text'
             input.required = true;
-            if (param.default !== undefined) input.value = param.default;
-            if (param.step !== undefined) input.step = param.step;
-            if (param.min !== undefined) input.min = param.min;
-            if (param.max !== undefined) input.max = param.max;
             if (param.input === 'text') input.placeholder = 'e.g. AAPL';
+
+            if (param.format === 'number') {
+                // A plain type=number input can't display digit grouping
+                // at all (browsers reject the commas outright), so this
+                // uses text + a live reformat-as-you-type instead.
+                input.type = 'text';
+                input.inputMode = 'numeric';
+                if (param.default !== undefined) input.value = Number(param.default).toLocaleString('en');
+                input.addEventListener('input', function() {
+                    var raw = input.value.replace(/,/g, '');
+                    if (raw === '' || isNaN(raw)) return;
+                    input.value = Number(raw).toLocaleString('en');
+                });
+            } else {
+                input.type = param.input; // 'date', 'number', or 'text'
+                if (param.default !== undefined) input.value = param.default;
+                if (param.step !== undefined) input.step = param.step;
+                if (param.min !== undefined) input.min = param.min;
+                if (param.max !== undefined) input.max = param.max;
+            }
+
             if (param.today_aware) {
                 // Defaults to today once FINRA has actually published that
                 // day's file (roughly mid-afternoon Pacific); before that,
@@ -129,6 +146,10 @@
         var headRow = document.createElement('tr');
         displayColumns.forEach(function(dc) {
             var th = document.createElement('th');
+            // Any formatted column is a number/percent/ratio -- right-align
+            // it so values compare cleanly down the column; the (unformatted)
+            // symbol/text columns stay left-aligned.
+            if (dc.format) th.classList.add('numeric');
             th.appendChild(document.createTextNode(dc.label));
             if (sortColumnIndex === dc.index) {
                 var indicator = document.createElement('span');
@@ -147,7 +168,14 @@
             var tr = document.createElement('tr');
             displayColumns.forEach(function(dc) {
                 var td = document.createElement('td');
-                td.textContent = formatValue(row[dc.index], dc.format);
+                var value = row[dc.index];
+                if (dc.format) td.classList.add('numeric');
+                // Flags a ratio column as notably extreme so it's visible
+                // at a glance instead of requiring a sort/scan to spot.
+                if (dc.format === 'multiplier' && typeof value === 'number' && value >= EXTREME_MULTIPLIER) {
+                    td.classList.add('value-extreme');
+                }
+                td.textContent = formatValue(value, dc.format);
                 tr.appendChild(td);
             });
             tbody.appendChild(tr);
@@ -165,7 +193,14 @@
         e.preventDefault();
         if (!activeKey) return;
 
-        var params = new URLSearchParams(new FormData(e.target));
+        // Comma-formatted number fields display grouped digits (e.g.
+        // "5,000,000") for readability -- strip them back out before
+        // sending, since no param here ever legitimately contains a comma.
+        var rawParams = new URLSearchParams(new FormData(e.target));
+        var params = new URLSearchParams();
+        rawParams.forEach(function(value, key) {
+            params.append(key, value.replace(/,/g, ''));
+        });
 
         document.getElementById('report-status').textContent = 'Running…';
         document.getElementById('report-table').innerHTML = '';
@@ -178,6 +213,19 @@
                 if (data.error) {
                     document.getElementById('report-status').textContent = 'Error: ' + data.error;
                     return;
+                }
+                // Applied once, right after a fresh run, so the most
+                // notable rows are visible without needing a header click.
+                var defaultSort = REPORTS[activeKey].default_sort;
+                if (defaultSort) {
+                    var idx = data.columns.indexOf(defaultSort.column);
+                    if (idx !== -1) {
+                        sortColumnIndex = idx;
+                        sortDir = defaultSort.dir || -1;
+                        data.rows.sort(function(a, b) {
+                            return sortDir * compareValues(a[idx], b[idx]);
+                        });
+                    }
                 }
                 renderTable(data.columns, data.rows);
             })

@@ -26,7 +26,10 @@ REPORTS = {
             # and lets it be picked, but only once it's actually likely to
             # have data -- otherwise it defaults to (and caps at) yesterday.
             {"name": "date", "label": "Date", "input": "date", "cast": "yyyymmdd", "today_aware": True},
-            {"name": "vol", "label": "Min Total Volume", "input": "number", "cast": "int", "default": 5000000, "step": 100000},
+            # format: "number" -- displayed comma-grouped (e.g. 5,000,000)
+            # and reformatted live as you type, since a plain type=number
+            # input can't show digit grouping at all.
+            {"name": "vol", "label": "Min Total Volume", "input": "number", "cast": "int", "default": 5000000, "step": 100000, "format": "number"},
             {"name": "shortperc", "label": "Min Buy % (0-1)", "input": "number", "cast": "float", "default": 0.5, "step": 0.01, "min": 0, "max": 1},
             {"name": "volpercent", "label": "Min Volume vs Avg (x)", "input": "number", "cast": "float", "default": 1.5, "step": 0.1, "min": 0},
         ],
@@ -44,6 +47,9 @@ REPORTS = {
             {"name": "avgbuypct", "label": "30-Day Avg Buy %", "format": "percent"},
             {"name": "pctavgbuy", "label": "Buy % vs Avg", "format": "multiplier"},
         ],
+        # Sorted this way by default so the most unusual rows are visible
+        # without needing to click a header first.
+        "default_sort": {"column": "pctavgvol", "dir": -1},
     },
     "ticker_detail": {
         "label": "Ticker Detail",

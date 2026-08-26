@@ -804,6 +804,16 @@ button {
   color: var(--text);
 }
 
+.report-table th.numeric,
+.report-table td.numeric {
+  text-align: right;
+}
+
+.report-table td.value-extreme {
+  color: var(--accent-hover);
+  font-weight: 600;
+}
+
 .report-table tbody tr:hover {
   background: var(--bg);
 }
