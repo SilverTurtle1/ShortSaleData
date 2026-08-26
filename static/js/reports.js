@@ -27,6 +27,15 @@
             if (param.min !== undefined) input.min = param.min;
             if (param.max !== undefined) input.max = param.max;
             if (param.input === 'text') input.placeholder = 'e.g. AAPL';
+            if (param.today_aware) {
+                // Defaults to today once FINRA has actually published that
+                // day's file (roughly mid-afternoon Pacific); before that,
+                // defaults to (and caps at) yesterday, same rule as the
+                // main treemap page's date picker.
+                var latestAllowed = pacificDateISO(isTodayPublished() ? 0 : 1);
+                input.max = latestAllowed;
+                input.value = latestAllowed;
+            }
             field.appendChild(input);
 
             fieldsContainer.appendChild(field);
@@ -40,6 +49,25 @@
         document.getElementById('report-status').textContent = '';
     }
 
+    // yyyymmdd -> MM/DD/YYYY, for display only -- the report itself still
+    // sends/receives the raw bigint form.
+    function formatDate(value) {
+        var s = String(value);
+        if (s.length !== 8) return s;
+        return s.slice(4, 6) + '/' + s.slice(6, 8) + '/' + s.slice(0, 4);
+    }
+
+    function formatValue(value, format) {
+        if (value === null || value === undefined) return '—';
+        switch (format) {
+            case 'date': return formatDate(value);
+            case 'percent': return value + '%';
+            case 'multiplier': return Number(value).toFixed(2) + 'x';
+            case 'number': return Number(value).toLocaleString('en');
+            default: return value;
+        }
+    }
+
     function renderTable(columns, rows) {
         var table = document.getElementById('report-table');
         table.innerHTML = '';
@@ -51,11 +79,23 @@
         document.getElementById('report-status').textContent =
             rows.length + ' row' + (rows.length === 1 ? '' : 's');
 
+        // A report can define "columns" to control display order, labels,
+        // and value formatting; otherwise fall back to whatever order/
+        // names the SQL function itself returned, unformatted.
+        var columnMeta = REPORTS[activeKey].columns;
+        var displayColumns = columnMeta
+            ? columnMeta.map(function(c) {
+                return {index: columns.indexOf(c.name), label: c.label, format: c.format};
+            })
+            : columns.map(function(c, i) {
+                return {index: i, label: c, format: null};
+            });
+
         var thead = document.createElement('thead');
         var headRow = document.createElement('tr');
-        columns.forEach(function(col) {
+        displayColumns.forEach(function(dc) {
             var th = document.createElement('th');
-            th.textContent = col;
+            th.textContent = dc.label;
             headRow.appendChild(th);
         });
         thead.appendChild(headRow);
@@ -64,9 +104,9 @@
         var tbody = document.createElement('tbody');
         rows.forEach(function(row) {
             var tr = document.createElement('tr');
-            row.forEach(function(value) {
+            displayColumns.forEach(function(dc) {
                 var td = document.createElement('td');
-                td.textContent = (value === null || value === undefined) ? '—' : value;
+                td.textContent = formatValue(row[dc.index], dc.format);
                 tr.appendChild(td);
             });
             tbody.appendChild(tr);

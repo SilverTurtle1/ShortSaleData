@@ -21,10 +21,27 @@ REPORTS = {
         "description": "Symbols on a single day with unusually high volume and buy% relative to their own historical average.",
         "function": "dp_daily_buys",
         "params": [
-            {"name": "date", "label": "Date", "input": "date", "cast": "yyyymmdd"},
+            # today_aware: FINRA doesn't publish a trading day's file until
+            # roughly mid-afternoon Pacific time, so this defaults to today
+            # and lets it be picked, but only once it's actually likely to
+            # have data -- otherwise it defaults to (and caps at) yesterday.
+            {"name": "date", "label": "Date", "input": "date", "cast": "yyyymmdd", "today_aware": True},
             {"name": "vol", "label": "Min Total Volume", "input": "number", "cast": "int", "default": 5000000, "step": 100000},
             {"name": "shortperc", "label": "Min Buy % (0-1)", "input": "number", "cast": "float", "default": 0.5, "step": 0.01, "min": 0, "max": 1},
             {"name": "volpercent", "label": "Min Volume vs Avg (x)", "input": "number", "cast": "float", "default": 1.5, "step": 0.1, "min": 0},
+        ],
+        # Controls result-table column order, labels, and value formatting.
+        # Raw names/order here must match dp_daily_buys' RETURNS TABLE
+        # exactly -- run_report() returns whatever Postgres calls them.
+        "columns": [
+            {"name": "date", "label": "Date", "format": "date"},
+            {"name": "symbol", "label": "Symbol"},
+            {"name": "totvol", "label": "Volume", "format": "number"},
+            {"name": "avgvol", "label": "30-Day Avg Volume", "format": "number"},
+            {"name": "pctavgvol", "label": "Volume vs Avg", "format": "multiplier"},
+            {"name": "buypct", "label": "Buy %", "format": "percent"},
+            {"name": "avgbuypct", "label": "30-Day Avg Buy %", "format": "percent"},
+            {"name": "pctavgbuy", "label": "Buy % vs Avg", "format": "multiplier"},
         ],
     },
     "ticker_detail": {

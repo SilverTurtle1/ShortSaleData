@@ -2,6 +2,7 @@
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script src="https://code.jquery.com/jquery-1.10.2.js"></script>
 <script src="/static/js/treemap.js"></script>
+<script src="/static/js/publish-time.js"></script>
 <script src="/static/js/loader.js" defer></script>
 <html lang="en">
 <head>
@@ -344,11 +345,7 @@
         // reload, since this only runs once at page load, but that's an
         // acceptable tradeoff for how rarely someone leaves the tab open
         // across the cutoff.
-        var pacificHour = parseInt(
-            new Date().toLocaleString('en-US', {timeZone: 'America/Los_Angeles', hour: 'numeric', hour12: false}),
-            10
-        );
-        var todayPublished = pacificHour >= 15;
+        var todayPublished = isTodayPublished();
 
         var pickerRanges = {
             'Yesterday': [moment().subtract(1, 'days').startOf('day'), moment().subtract(1, 'days').endOf('day')],
