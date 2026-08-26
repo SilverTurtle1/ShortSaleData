@@ -24,7 +24,10 @@
 <div class="filters">
     <div class="page-header">
         <div>
-            <h2>FINRA Off-Exchange Short Volume</h2>
+            <h2>
+                FINRA Off-Exchange Short Volume
+                <button id="info-toggle" class="info-toggle" type="button" aria-label="What does this data mean?">&#9432;</button>
+            </h2>
             <p class="lead">Select a date range for the data</p>
         </div>
         <div class="page-header-actions">
@@ -261,6 +264,23 @@
 
 <div class="overlay hidden"></div>
 
+<section class="info-modal hidden">
+  <div class="flex">
+    <div>
+      <h3>What am I looking at?</h3>
+    </div>
+    <button class="btn-close info-close">⨉</button>
+  </div>
+  <div class="info-modal-body">
+    <p>FINRA publishes daily data on U.S. stock trades that happen away from the public exchanges (NYSE, Nasdaq) &mdash; mostly through large trading firms called <strong>market makers</strong> (e.g. Citadel Securities, Virtu) that fill orders placed through everyday retail brokerage apps.</p>
+    <p>&ldquo;Short volume&rdquo; here doesn&rsquo;t necessarily mean someone is betting a stock will fall. When you place a <strong>buy</strong> order, it&rsquo;s often routed to one of these market makers, who fills it out of their own inventory. If they don&rsquo;t have the shares on hand, they sell them to you <strong>short</strong> &mdash; borrowing shares to sell now and buying them back later. So a spike in short volume can actually reflect a lot of people <strong>buying</strong>, not selling.</p>
+    <p>This is a rough signal, not a certain one. It shows a day&rsquo;s trading flow, not whether the market maker is still short by the close &mdash; and on options-heavy stocks, some of this volume comes from market makers hedging, unrelated to retail buying or selling.</p>
+    <p><strong>Bottom line:</strong> a high &ldquo;% short&rdquo; often points to heavy off-exchange trading interest &mdash; more often tied to buying than selling &mdash; not necessarily bearish sentiment.</p>
+  </div>
+</section>
+
+<div class="info-overlay hidden"></div>
+
 <script src="/static/js/barchart.js"></script>
 <script>
     $(document).on('loaderEvent', () => {
@@ -334,6 +354,37 @@ overlay.addEventListener("click", closeModal);
 document.addEventListener("keydown", function (e) {
   if (e.key === "Escape" && !modal.classList.contains("hidden")) {
     closeModal();
+  }
+});
+
+</script>
+
+<script>
+
+// Separate from the bar-chart modal above -- distinct classes/selectors
+// so neither modal's open/close logic can grab the wrong element.
+const infoModal = document.querySelector(".info-modal");
+const infoOverlay = document.querySelector(".info-overlay");
+const infoToggleBtn = document.getElementById("info-toggle");
+const infoCloseBtn = document.querySelector(".info-close");
+
+const openInfoModal = function () {
+  infoModal.classList.remove("hidden");
+  infoOverlay.classList.remove("hidden");
+};
+
+const closeInfoModal = function () {
+  infoModal.classList.add("hidden");
+  infoOverlay.classList.add("hidden");
+};
+
+infoToggleBtn.addEventListener("click", openInfoModal);
+infoCloseBtn.addEventListener("click", closeInfoModal);
+infoOverlay.addEventListener("click", closeInfoModal);
+
+document.addEventListener("keydown", function (e) {
+  if (e.key === "Escape" && !infoModal.classList.contains("hidden")) {
+    closeInfoModal();
   }
 });
 
