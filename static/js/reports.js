@@ -1,9 +1,15 @@
 (function() {
     var activeKey = null;
+    var currentColumns = null;
+    var currentRows = null;
+    var sortColumnIndex = null; // index into the raw `columns` array from the server
+    var sortDir = 1; // 1 = ascending, -1 = descending
 
     function buildForm(key) {
         var report = REPORTS[key];
         activeKey = key;
+        sortColumnIndex = null;
+        sortDir = 1;
         document.getElementById('report-description').textContent = report.description;
 
         var fieldsContainer = document.getElementById('report-form-fields');
@@ -62,13 +68,41 @@
         switch (format) {
             case 'date': return formatDate(value);
             case 'percent': return value + '%';
-            case 'multiplier': return Number(value).toFixed(2) + 'x';
+            case 'multiplier': return Number(value).toFixed(1) + 'x';
             case 'number': return Number(value).toLocaleString('en');
             default: return value;
         }
     }
 
+    // Nulls sort last regardless of direction; numbers compare
+    // numerically, everything else falls back to string comparison.
+    function compareValues(a, b) {
+        var aNull = (a === null || a === undefined);
+        var bNull = (b === null || b === undefined);
+        if (aNull && bNull) return 0;
+        if (aNull) return 1;
+        if (bNull) return -1;
+        if (typeof a === 'number' && typeof b === 'number') return a - b;
+        return String(a).localeCompare(String(b));
+    }
+
+    function sortByColumn(index) {
+        if (sortColumnIndex === index) {
+            sortDir = -sortDir;
+        } else {
+            sortColumnIndex = index;
+            sortDir = -1; // first click on a column shows the extremes first
+        }
+        currentRows.sort(function(a, b) {
+            return sortDir * compareValues(a[index], b[index]);
+        });
+        renderTable(currentColumns, currentRows);
+    }
+
     function renderTable(columns, rows) {
+        currentColumns = columns;
+        currentRows = rows;
+
         var table = document.getElementById('report-table');
         table.innerHTML = '';
 
@@ -95,7 +129,14 @@
         var headRow = document.createElement('tr');
         displayColumns.forEach(function(dc) {
             var th = document.createElement('th');
-            th.textContent = dc.label;
+            th.appendChild(document.createTextNode(dc.label));
+            if (sortColumnIndex === dc.index) {
+                var indicator = document.createElement('span');
+                indicator.className = 'sort-indicator';
+                indicator.textContent = ' ' + (sortDir === 1 ? '▲' : '▼');
+                th.appendChild(indicator);
+            }
+            th.addEventListener('click', function() { sortByColumn(dc.index); });
             headRow.appendChild(th);
         });
         thead.appendChild(headRow);
@@ -128,6 +169,8 @@
 
         document.getElementById('report-status').textContent = 'Running…';
         document.getElementById('report-table').innerHTML = '';
+        sortColumnIndex = null;
+        sortDir = 1;
 
         fetch('/reports/run/' + activeKey + '?' + params.toString())
             .then(function(res) { return res.json(); })

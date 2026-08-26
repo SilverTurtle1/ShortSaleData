@@ -34,7 +34,8 @@ REPORTS = {
         # Raw names/order here must match dp_daily_buys' RETURNS TABLE
         # exactly -- run_report() returns whatever Postgres calls them.
         "columns": [
-            {"name": "date", "label": "Date", "format": "date"},
+            # "date" is deliberately omitted -- it's a report parameter,
+            # identical on every row, so showing it per-row is just noise.
             {"name": "symbol", "label": "Symbol"},
             {"name": "totvol", "label": "Volume", "format": "number"},
             {"name": "avgvol", "label": "30-Day Avg Volume", "format": "number"},

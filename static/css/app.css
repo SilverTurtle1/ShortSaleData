@@ -784,6 +784,18 @@ button {
   color: var(--text-muted);
   border-bottom: 1px solid var(--border);
   padding: 8px 14px 8px 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.report-table th:hover {
+  color: var(--text);
+}
+
+.report-table th .sort-indicator {
+  display: inline-block;
+  width: 1em;
+  color: var(--accent);
 }
 
 .report-table td {
