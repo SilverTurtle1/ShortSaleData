@@ -85,7 +85,12 @@ def is_today_pacific(yyyymmdd):
 
 def get_csv(url):
     try:
-        response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
+        # Without a timeout, a stalled connection (FINRA's CDN hanging
+        # instead of cleanly failing) blocks this call forever -- no
+        # exception, no crash, just a silently stuck process. Seen for
+        # real: a backfill run and a live web request both went
+        # unresponsive at the same moment, almost certainly this.
+        response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=30)
         if response.status_code == 403:
             # THIS CODE WON"T WORK BECAUSE THE CONTENT RETURNED IS NOT CLEAN XML
             # tree = ET.fromstring(response.content)
@@ -367,6 +372,15 @@ def fetch_ssdata_raw(startdate, enddate=0):
                 # Also load the closing price of the day for each ticker in the FINRA file and update FINRAFileDetail
 
                 temp_start = input_date
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+                # A stalled/unreachable connection to FINRA is a transient
+                # network problem, not evidence the file doesn't exist --
+                # unlike the 403 case below, don't write a permanent
+                # "no file" marker for it. Leaving no FINRAFiles row at
+                # all means this date is still "missing" and gets retried
+                # on the next run, rather than being wrongly blacklisted.
+                print(f"[!] Network error fetching FINRA data for {d}: {e}")
+                continue
             except requests.HTTPError as e:
                 print(f"[!] Exception caught: {e}{d}")
                 # Create entry in db to indicate no file ONLY if date is not today.
