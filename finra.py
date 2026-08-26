@@ -182,7 +182,17 @@ def fetch_ssdata_raw(startdate, enddate=0):
                         )
 
     finra_file_detail = Table('FINRAFileDetail', metadata,
-                              Column('Date', BIGINT, ForeignKey('FINRAFiles.Date', ondelete='CASCADE'), nullable=False),
+                              # index=True: every query in this app filters
+                              # FINRAFileDetail by Date, including the
+                              # self-heal existence check, and this table
+                              # has millions of rows with no index at all --
+                              # a foreign key does NOT implicitly index the
+                              # referencing column in Postgres. Likely the
+                              # actual cause of a worker timeout observed in
+                              # production right after the self-heal fix
+                              # started actually running its EXISTS check
+                              # against this table for real.
+                              Column('Date', BIGINT, ForeignKey('FINRAFiles.Date', ondelete='CASCADE'), nullable=False, index=True),
                               Column('Symbol', String(10)),
                               Column('ShortVolume', BIGINT),
                               Column('ShortExemptVolume', BIGINT),
@@ -191,6 +201,22 @@ def fetch_ssdata_raw(startdate, enddate=0):
                               Column('Close', Float)
                               )
     metadata.create_all(engine)
+
+    # metadata.create_all() only creates tables that don't exist yet -- it
+    # does not retroactively alter an existing table's schema, so the
+    # index=True above has no effect on the FINRAFileDetail table that's
+    # already live in production. CONCURRENTLY avoids taking a lock that
+    # would block reads/writes on this table while the index builds, and
+    # must run outside of any transaction; IF NOT EXISTS makes every call
+    # after the first one a cheap no-op.
+    index_conn = engine.connect().execution_options(isolation_level="AUTOCOMMIT")
+    try:
+        index_conn.execute(text(
+            'CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_finrafiledetail_date '
+            'ON "FINRAFileDetail" ("Date")'
+        ))
+    finally:
+        index_conn.close()
 
     # A date only counts as done if it's a confirmed no-file day
     # (FileURL IS NULL) or it actually has detail rows -- a date whose
