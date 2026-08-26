@@ -133,6 +133,14 @@
         var rangeEnd;
 
         function populateTreemap(startDate, endDate) {
+            // Every filter change (date range, percent buckets, ETFs,
+            // volume slider) funnels through here -- showing the spinner
+            // in one place means it fires consistently regardless of
+            // which control triggered the reload, instead of only on
+            // date-range changes and leaving the panel looking frozen
+            // (or, on a slow/cold-started backend, looking like nothing
+            // is happening at all) for every other filter.
+            $(document).trigger("loaderEvent");
             start = startDate;
             end = endDate;
             minvol = slider.value;

@@ -3,24 +3,35 @@ import json
 import os
 
 import pandas as pd
-from flask import Flask, render_template, jsonify, session, request
+from flask import Flask, render_template, jsonify, request
 
 from finra import fetch_ssdata_raw, build_ssdata, get_company_name
-from flask_session import Session
 from reports import REPORTS, run_report
 
 # Initiate Flask Application
 app = Flask(__name__)
-# Required for signed session cookies; without this Flask-Session issues
-# unsigned session IDs that can be guessed or swapped by a client.
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(24))
-app.config["SESSION_PERMANENT"] = False
-app.config["SESSION_TYPE"] = "filesystem"
-# Flask-Session's filesystem backend does not sign the session-id cookie by
-# default (use_signer=False) even with a secret_key set, which leaves the
-# raw session ID guessable/swappable. This turns signing on.
-app.config["SESSION_USE_SIGNER"] = True
-Session(app)
+
+# Caches the most recently fetched raw date range and the most recently
+# built detail view, in process memory rather than in a per-session,
+# JSON-serialized cookie/file. The old approach (Flask-Session, filesystem
+# backend) meant every single /treemap request -- even just toggling a
+# checkbox with the exact same date range already cached -- paid the cost
+# of a full JSON serialize or deserialize of the whole raw dataset, and a
+# disk write, every time. For a wide date range that redundant churn was
+# enough on its own to push the web service (512MB) into repeated
+# out-of-memory crashes under real use.
+#
+# This trades strict per-visitor isolation for that: two people using the
+# app at the same moment with different date ranges could momentarily
+# clobber each other's cached view. Acceptable here -- this is a
+# personal/small-group tool, not a public multi-tenant app -- but worth
+# knowing if that ever changes.
+_cache = {
+    "start_date": None,
+    "end_date": None,
+    "raw_df": None,
+    "detail_json": None,
+}
 
 # Import DataFrame
 # PATH_IN = r'static\data\miserables.json'
@@ -64,19 +75,17 @@ def treemap(start_date=0, end_date=0, min_vol=5000000, perc_buckets="50plus,40to
         # min_vol/perc_buckets (the filter toggles) are applied as a cheap
         # in-memory filter below on every request, so toggling them never
         # re-hits the network or the database.
-        if (session.get('rawdata') is None
-                or session.get('startdate') != start_date
-                or session.get('enddate') != end_date):
-            raw_df = fetch_ssdata_raw(start_date, end_date)
-            session['startdate'] = start_date
-            session['enddate'] = end_date
-            session['rawdata'] = raw_df.to_json(orient='records')
-        else:
-            raw_df = pd.read_json(session['rawdata'])
+        if (_cache["raw_df"] is None
+                or _cache["start_date"] != start_date
+                or _cache["end_date"] != end_date):
+            _cache["raw_df"] = fetch_ssdata_raw(start_date, end_date)
+            _cache["start_date"] = start_date
+            _cache["end_date"] = end_date
+        raw_df = _cache["raw_df"]
 
         finraList = build_ssdata(raw_df, min_vol, perc_buckets, etfs)
         finra_df, finra_detail = finraList
-        session['dataDetail'] = finra_detail
+        _cache["detail_json"] = finra_detail
 
         # No symbols matched the current filter -- a normal outcome for a
         # strict min_vol/perc_buckets combination, not an error. Return a
@@ -98,7 +107,7 @@ def treemap(start_date=0, end_date=0, min_vol=5000000, perc_buckets="50plus,40to
 
 @app.route('/barchart/<symbol>')
 def barchart(symbol):
-    finra_detail = session['dataDetail']
+    finra_detail = _cache["detail_json"]
     temp_df = pd.read_json(finra_detail)
     temp_df = temp_df.loc[temp_df['Symbol'] == symbol]
     temp_df["Date"] = pd.to_datetime(temp_df["Date"], format='%Y%m%d').dt.strftime('%m-%d-%Y')
