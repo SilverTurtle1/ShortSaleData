@@ -93,11 +93,23 @@ def get_engine(user, passwd, host, port, db):
     url = f"postgresql://{user}:{passwd}@{host}:{port}/{db}"
     engine = create_engine(
         url,
-        pool_size=50, echo=False)
+        pool_size=5, pool_timeout=10, echo=False)
     return engine
 
 
 def get_engine_from_settings():
+    # A fresh engine is created per request (see fetch_ssdata_raw) and
+    # this app only ever uses a handful of connections from it at once,
+    # so pool_size=50 was pure headroom that made an engine leaked by a
+    # missed engine.dispose() (any exception used to skip it entirely --
+    # see fetch_ssdata_raw) far more expensive against Render Postgres's
+    # own connection limit. pool_timeout=10 also matters independently
+    # of leaks: SQLAlchemy's default pool_timeout is 30s, suspiciously
+    # identical to gunicorn's default worker timeout -- if the pool ever
+    # is exhausted, the next checkout would otherwise block for just
+    # long enough to make gunicorn kill the whole worker instead of the
+    # checkout failing with a catchable, fast error.
+    #
     # Render auto-populates DATABASE_URL when a database is linked to the
     # service, and keeps it in sync if the password is ever rotated from
     # the Render side, so prefer it over the individual PG_RENDER_* vars.
@@ -105,7 +117,7 @@ def get_engine_from_settings():
     if database_url:
         if database_url.startswith('postgres://'):
             database_url = database_url.replace('postgres://', 'postgresql://', 1)
-        return create_engine(database_url, pool_size=50, echo=False)
+        return create_engine(database_url, pool_size=5, pool_timeout=10, echo=False)
 
     keys = ['pguser', 'pgpasswd', 'pghost', 'pgport', 'pgdb']
     if local_db:
@@ -170,178 +182,179 @@ def fetch_ssdata_raw(startdate, enddate=0):
     '''
 
     # print(engine.url.database)
-    session = get_session()
-    # session.close()
-    engine = session.get_bind()
-    conn = engine.connect()
-    metadata = MetaData()
-
-    finra_files = Table('FINRAFiles', metadata,
-                        Column('Date', BIGINT, primary_key=True),
-                        Column('FileURL', String(100))
-                        )
-
-    finra_file_detail = Table('FINRAFileDetail', metadata,
-                              # index=True: every query in this app filters
-                              # FINRAFileDetail by Date, including the
-                              # self-heal existence check, and this table
-                              # has millions of rows with no index at all --
-                              # a foreign key does NOT implicitly index the
-                              # referencing column in Postgres. Likely the
-                              # actual cause of a worker timeout observed in
-                              # production right after the self-heal fix
-                              # started actually running its EXISTS check
-                              # against this table for real.
-                              Column('Date', BIGINT, ForeignKey('FINRAFiles.Date', ondelete='CASCADE'), nullable=False, index=True),
-                              Column('Symbol', String(10)),
-                              Column('ShortVolume', BIGINT),
-                              Column('ShortExemptVolume', BIGINT),
-                              Column('TotalVolume', BIGINT),
-                              Column('Market', String(10)),
-                              Column('Close', Float)
-                              )
-    metadata.create_all(engine)
-
-    # metadata.create_all() only creates tables that don't exist yet -- it
-    # does not retroactively alter an existing table's schema, so the
-    # index=True above has no effect on the FINRAFileDetail table that's
-    # already live in production. CONCURRENTLY avoids taking a lock that
-    # would block reads/writes on this table while the index builds, and
-    # must run outside of any transaction; IF NOT EXISTS makes every call
-    # after the first one a cheap no-op.
-    index_conn = engine.connect().execution_options(isolation_level="AUTOCOMMIT")
     try:
-        index_conn.execute(text(
-            'CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_finrafiledetail_date '
-            'ON "FINRAFileDetail" ("Date")'
-        ))
-    finally:
-        index_conn.close()
+        session = get_session()
+        # session.close()
+        engine = session.get_bind()
+        conn = engine.connect()
+        metadata = MetaData()
 
-    # A date only counts as done if it's a confirmed no-file day
-    # (FileURL IS NULL) or it actually has detail rows -- a date whose
-    # FINRA fetch succeeded (FileURL set) but has zero FINRAFileDetail
-    # rows is stuck mid-pipeline (e.g. the Polygon closing-price step
-    # crashed before writing detail rows) and needs to be re-fetched,
-    # not silently skipped forever. This makes the fetch loop
-    # self-healing for any past date left in that broken state, without
-    # a separate manual cleanup step.
-    select = text("""
-                SELECT "Date"
-                FROM "FINRAFiles" f
-                WHERE "Date" IN :date_list
-                AND (
-                    "FileURL" IS NULL
-                    OR EXISTS (
-                        SELECT 1 FROM "FINRAFileDetail" d WHERE d."Date" = f."Date"
-                    )
-                )
-                """)
-    select = select.bindparams(date_list=tuple(date_list))
-    with engine.begin() as con:
-        for row in con.execute(select):
-            # remove entries that already exist
-            dates.remove(str(row.Date))
+        finra_files = Table('FINRAFiles', metadata,
+                            Column('Date', BIGINT, primary_key=True),
+                            Column('FileURL', String(100))
+                            )
 
-    print("Still need to load files from FINRA for ... ", dates)
+        finra_file_detail = Table('FINRAFileDetail', metadata,
+                                  # index=True: every query in this app filters
+                                  # FINRAFileDetail by Date, including the
+                                  # self-heal existence check, and this table
+                                  # has millions of rows with no index at all --
+                                  # a foreign key does NOT implicitly index the
+                                  # referencing column in Postgres. Likely the
+                                  # actual cause of a worker timeout observed in
+                                  # production right after the self-heal fix
+                                  # started actually running its EXISTS check
+                                  # against this table for real.
+                                  Column('Date', BIGINT, ForeignKey('FINRAFiles.Date', ondelete='CASCADE'), nullable=False, index=True),
+                                  Column('Symbol', String(10)),
+                                  Column('ShortVolume', BIGINT),
+                                  Column('ShortExemptVolume', BIGINT),
+                                  Column('TotalVolume', BIGINT),
+                                  Column('Market', String(10)),
+                                  Column('Close', Float)
+                                  )
+        metadata.create_all(engine)
 
-    sql_compare = '''
-        SELECT  IF NOT EXISTS finra_no_file (date varchar(10) NOT NULL,
-        UNIQUE (date)
-        )
-    '''
-
-    for d in dates:
-        finra_file = finra_dir + f'{d}.txt'
+        # metadata.create_all() only creates tables that don't exist yet -- it
+        # does not retroactively alter an existing table's schema, so the
+        # index=True above has no effect on the FINRAFileDetail table that's
+        # already live in production. CONCURRENTLY avoids taking a lock that
+        # would block reads/writes on this table while the index builds, and
+        # must run outside of any transaction; IF NOT EXISTS makes every call
+        # after the first one a cheap no-op.
+        index_conn = engine.connect().execution_options(isolation_level="AUTOCOMMIT")
         try:
-            print(finra_file)
-            ssdata_temp = get_csv(finra_file)
-            ssdata_temp.drop(ssdata_temp.tail(1).index, inplace=True)  # drop last n rows
-            start_time = time.time()
-            # ON CONFLICT: a date being reprocessed here (e.g. self-healing
-            # a previously broken/incomplete date, see the query above)
-            # already has a FINRAFiles row from the earlier attempt.
-            sql = text("""
-                INSERT INTO "FINRAFiles" ("Date", "FileURL") VALUES (:date, :file)
-                ON CONFLICT ("Date") DO UPDATE SET "FileURL" = EXCLUDED."FileURL"
-            """)
-            sql = sql.bindparams(date=d, file=finra_file)
-            #engine.execute(sql)
-            print("Before Insert into FINRA DB")
+            index_conn.execute(text(
+                'CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_finrafiledetail_date '
+                'ON "FINRAFileDetail" ("Date")'
+            ))
+        finally:
+            index_conn.close()
 
-            conn.execute(sql)
-            conn.commit()
+        # A date only counts as done if it's a confirmed no-file day
+        # (FileURL IS NULL) or it actually has detail rows -- a date whose
+        # FINRA fetch succeeded (FileURL set) but has zero FINRAFileDetail
+        # rows is stuck mid-pipeline (e.g. the Polygon closing-price step
+        # crashed before writing detail rows) and needs to be re-fetched,
+        # not silently skipped forever. This makes the fetch loop
+        # self-healing for any past date left in that broken state, without
+        # a separate manual cleanup step.
+        select = text("""
+                    SELECT "Date"
+                    FROM "FINRAFiles" f
+                    WHERE "Date" IN :date_list
+                    AND (
+                        "FileURL" IS NULL
+                        OR EXISTS (
+                            SELECT 1 FROM "FINRAFileDetail" d WHERE d."Date" = f."Date"
+                        )
+                    )
+                    """)
+        select = select.bindparams(date_list=tuple(date_list))
+        with engine.begin() as con:
+            for row in con.execute(select):
+                # remove entries that already exist
+                dates.remove(str(row.Date))
 
+        print("Still need to load files from FINRA for ... ", dates)
+
+        sql_compare = '''
+            SELECT  IF NOT EXISTS finra_no_file (date varchar(10) NOT NULL,
+            UNIQUE (date)
+            )
+        '''
+
+        for d in dates:
+            finra_file = finra_dir + f'{d}.txt'
             try:
-                client = RESTClient(apikey)
-                aggs = client.get_grouped_daily_aggs(f"{d[:4]}-{d[4:6]}-{d[6:]}")
-                data = []
-                for agg in aggs:
-                    data.append({
-                        "Symbol": agg.ticker,
-                        "Close": agg.close
-                    })
-                polygondf = pd.DataFrame(data)
-            except BadResponse as e:
-                # Polygon rejects grouped-aggregates requests for the
-                # current date until end of day on this account's tier
-                # ("Attempted to request today's data before end of day").
-                # That's unrelated to whether FINRA's own short-volume file
-                # (already fetched successfully above) is available -- fall
-                # back to a closing price of NULL for this date rather than
-                # losing the whole day's short-volume data over it.
-                print(f"[!] Polygon closing prices unavailable for {d}: {e}")
-                polygondf = pd.DataFrame(columns=["Symbol", "Close"])
-            mergeddf = pd.merge(polygondf, ssdata_temp, on='Symbol', how='right')
-            # print(mergeddf)
-            print("Before writing FINRA file to SQL")
-            mergeddf.to_sql('FINRAFileDetail', con=engine, if_exists='append', index=False)
-            print("to_sql duration: {} seconds".format(time.time() - start_time))
-            # Also load the closing price of the day for each ticker in the FINRA file and update FINRAFileDetail
-
-            temp_start = input_date
-        except requests.HTTPError as e:
-            print(f"[!] Exception caught: {e}{d}")
-            # Create entry in db to indicate no file ONLY if date is not today.
-            # FINRA's file for the current trading day isn't published until
-            # mid-afternoon Pacific time, so a fetch attempted earlier in the
-            # day fails the same way a weekend/holiday does. Caching that as
-            # a permanent "no file" record would keep skipping today's date
-            # even after the real file becomes available later -- leaving
-            # today unmarked lets a later request this same day retry it.
-            if not is_today_pacific(d):
-                # ON CONFLICT: this date may already have a FINRAFiles row
-                # from an earlier broken/incomplete attempt being retried.
+                print(finra_file)
+                ssdata_temp = get_csv(finra_file)
+                ssdata_temp.drop(ssdata_temp.tail(1).index, inplace=True)  # drop last n rows
+                start_time = time.time()
+                # ON CONFLICT: a date being reprocessed here (e.g. self-healing
+                # a previously broken/incomplete date, see the query above)
+                # already has a FINRAFiles row from the earlier attempt.
                 sql = text("""
-                                INSERT INTO "FINRAFiles" ("Date") VALUES (:date)
-                                ON CONFLICT ("Date") DO UPDATE SET "FileURL" = NULL
-                            """)
-                sql = sql.bindparams(date=d)
-                print("In Exception handling")
+                    INSERT INTO "FINRAFiles" ("Date", "FileURL") VALUES (:date, :file)
+                    ON CONFLICT ("Date") DO UPDATE SET "FileURL" = EXCLUDED."FileURL"
+                """)
+                sql = sql.bindparams(date=d, file=finra_file)
+                #engine.execute(sql)
+                print("Before Insert into FINRA DB")
+
                 conn.execute(sql)
                 conn.commit()
 
-            if numDays == 0:
-                prior_day = datetime.strptime(temp_start, '%Y%m%d') - timedelta(days=1)
-                temp_start = prior_day.strftime('%Y%m%d')
-                finra_file = finra_dir + f'{temp_start}.txt'
-            continue
+                try:
+                    client = RESTClient(apikey)
+                    aggs = client.get_grouped_daily_aggs(f"{d[:4]}-{d[4:6]}-{d[6:]}")
+                    data = []
+                    for agg in aggs:
+                        data.append({
+                            "Symbol": agg.ticker,
+                            "Close": agg.close
+                        })
+                    polygondf = pd.DataFrame(data)
+                except BadResponse as e:
+                    # Polygon rejects grouped-aggregates requests for the
+                    # current date until end of day on this account's tier
+                    # ("Attempted to request today's data before end of day").
+                    # That's unrelated to whether FINRA's own short-volume file
+                    # (already fetched successfully above) is available -- fall
+                    # back to a closing price of NULL for this date rather than
+                    # losing the whole day's short-volume data over it.
+                    print(f"[!] Polygon closing prices unavailable for {d}: {e}")
+                    polygondf = pd.DataFrame(columns=["Symbol", "Close"])
+                mergeddf = pd.merge(polygondf, ssdata_temp, on='Symbol', how='right')
+                # print(mergeddf)
+                print("Before writing FINRA file to SQL")
+                mergeddf.to_sql('FINRAFileDetail', con=engine, if_exists='append', index=False)
+                print("to_sql duration: {} seconds".format(time.time() - start_time))
+                # Also load the closing price of the day for each ticker in the FINRA file and update FINRAFileDetail
 
-    # if temp_start == input_date:
-    #     break
+                temp_start = input_date
+            except requests.HTTPError as e:
+                print(f"[!] Exception caught: {e}{d}")
+                # Create entry in db to indicate no file ONLY if date is not today.
+                # FINRA's file for the current trading day isn't published until
+                # mid-afternoon Pacific time, so a fetch attempted earlier in the
+                # day fails the same way a weekend/holiday does. Caching that as
+                # a permanent "no file" record would keep skipping today's date
+                # even after the real file becomes available later -- leaving
+                # today unmarked lets a later request this same day retry it.
+                if not is_today_pacific(d):
+                    # ON CONFLICT: this date may already have a FINRAFiles row
+                    # from an earlier broken/incomplete attempt being retried.
+                    sql = text("""
+                                    INSERT INTO "FINRAFiles" ("Date") VALUES (:date)
+                                    ON CONFLICT ("Date") DO UPDATE SET "FileURL" = NULL
+                                """)
+                    sql = sql.bindparams(date=d)
+                    print("In Exception handling")
+                    conn.execute(sql)
+                    conn.commit()
 
-    # At this point all FINRA data for selected timeframe is stored in the database
-    # temp_df = ssdata_temp[(ssdata_temp.TotalVolume > min_volume)]
+                if numDays == 0:
+                    prior_day = datetime.strptime(temp_start, '%Y%m%d') - timedelta(days=1)
+                    temp_start = prior_day.strftime('%Y%m%d')
+                    finra_file = finra_dir + f'{temp_start}.txt'
+                continue
 
-    print("Load the following dates from db ... ", date_list)
-    select = text("""
-        SELECT * FROM "FINRAFileDetail" WHERE "Date" IN :datelist ORDER BY "Date"
-    """)
-    select = select.bindparams(datelist=tuple(date_list))
-    print(select)
-    raw_df = pd.read_sql(select, engine)
+        # if temp_start == input_date:
+        #     break
 
-    engine.dispose()  # Close all checked in sessions
+        # At this point all FINRA data for selected timeframe is stored in the database
+        # temp_df = ssdata_temp[(ssdata_temp.TotalVolume > min_volume)]
+
+        print("Load the following dates from db ... ", date_list)
+        select = text("""
+            SELECT * FROM "FINRAFileDetail" WHERE "Date" IN :datelist ORDER BY "Date"
+        """)
+        select = select.bindparams(datelist=tuple(date_list))
+        print(select)
+        raw_df = pd.read_sql(select, engine)
+    finally:
+        engine.dispose()  # Close all checked in sessions -- always, even on error
 
     return raw_df
 
