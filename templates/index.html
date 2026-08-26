@@ -44,9 +44,8 @@
             </div>
 
             <div class="filter-field">
-                <span class="field-label">Min short volume %</span>
-                <input type="range" min="0" max="70" step="10" value="40" id="percslider">
-                <span class="field-value"><span id="minperc"></span>%</span>
+                <span class="field-label">Short volume %</span>
+                <div id="percbucket-toggles"></div>
             </div>
 
             <div class="filter-field">
@@ -90,14 +89,37 @@
           debouncedLoadData();
         }
 
-        var percslider = document.getElementById("percslider");
-        var percoutput = document.getElementById("minperc");
-        percoutput.innerHTML = percslider.value;
+        // Matches PERCENT_BUCKETS in finra.py and percentBuckets in
+        // treemap.js -- these are the same ranges the treemap itself
+        // groups and colors by, so toggling one off hides exactly the
+        // section it looks like it should.
+        const percBuckets = [
+            {value: "50plus", label: "50%+"},
+            {value: "40to50", label: "40-50%"},
+            {value: "30to40", label: "30-40%"},
+            {value: "under30", label: "<30%"},
+        ];
+        percBuckets.forEach((bucket) => {
+            const id = `percbucket-${bucket.value}`;
 
-        percslider.oninput = function() {
-          percoutput.innerHTML = this.value;
-          debouncedLoadData();
-        }
+            const label = document.createElement('label');
+            label.setAttribute("for", id);
+
+            const checkbox = document.createElement('input');
+            checkbox.type = "checkbox";
+            checkbox.name = "percbucket";
+            checkbox.value = bucket.value;
+            checkbox.id = id;
+            checkbox.checked = true;
+            // loadData() is declared in a later <script> block -- wrap in
+            // a closure so it's looked up at click time, not now (it
+            // would be undefined at this point in page load otherwise).
+            checkbox.addEventListener('click', function() { loadData(); });
+
+            label.appendChild(checkbox);
+            label.appendChild(document.createTextNode(bucket.label));
+            document.querySelector("#percbucket-toggles").appendChild(label);
+        });
     </script>
     <script>
         var rangeStart;
@@ -107,7 +129,11 @@
             start = startDate;
             end = endDate;
             minvol = slider.value;
-            percshort = percslider.value;
+            let bucketBoxes = document.querySelectorAll('input[name="percbucket"]:checked');
+            let percbuckets = [];
+            bucketBoxes.forEach((checkbox) => {
+                percbuckets.push(checkbox.value);
+            });
             let checkboxes = document.querySelectorAll('input[name="fund"]:checked');
             let values = [];
             checkboxes.forEach((checkbox) => {
@@ -117,7 +143,7 @@
 
 
                 document.getElementById("treemap-error").classList.add("hidden");
-                fetch('/treemap/'+ start +'/'+ end + '/' + minvol + '/' + percshort + '/' + values)
+                fetch('/treemap/'+ start +'/'+ end + '/' + minvol + '/' + percbuckets + '/' + values)
                     .then(function(response){
                         response.json().then(function(response){
                             renderJSONTreeMap(response);

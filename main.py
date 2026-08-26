@@ -54,16 +54,16 @@ def index():
     return render_template('index.html')
 
 
-@app.route('/treemap/<start_date>/<end_date>/<min_vol>/<perc_short>/<etfs>')
-def treemap(start_date=0, end_date=0, min_vol=5000000, perc_short=50, etfs=0):
+@app.route('/treemap/<start_date>/<end_date>/<min_vol>/<perc_buckets>/<etfs>')
+def treemap(start_date=0, end_date=0, min_vol=5000000, perc_buckets="50plus,40to50,30to40,under30", etfs=0):
     if not start_date:
         return jsonify({"error": "Could not load data for " + start_date})
 
     try:
         # The FINRA/Polygon fetch is only re-run when the date range changes;
-        # min_vol/perc_short (the slider) are applied as a cheap in-memory
-        # filter below on every request, so moving the slider never re-hits
-        # the network or the database.
+        # min_vol/perc_buckets (the filter toggles) are applied as a cheap
+        # in-memory filter below on every request, so toggling them never
+        # re-hits the network or the database.
         if (session.get('rawdata') is None
                 or session.get('startdate') != start_date
                 or session.get('enddate') != end_date):
@@ -74,12 +74,12 @@ def treemap(start_date=0, end_date=0, min_vol=5000000, perc_short=50, etfs=0):
         else:
             raw_df = pd.read_json(session['rawdata'])
 
-        finraList = build_ssdata(raw_df, min_vol, perc_short, etfs)
+        finraList = build_ssdata(raw_df, min_vol, perc_buckets, etfs)
         finra_df, finra_detail = finraList
         session['dataDetail'] = finra_detail
 
         # No symbols matched the current filter -- a normal outcome for a
-        # strict min_vol/perc_short combination, not an error. Return a
+        # strict min_vol/perc_buckets combination, not an error. Return a
         # valid empty array rather than an {"error": ...} object, since the
         # latter crashes the treemap renderer (it expects an array) and
         # triggers the frontend's retry-with-a-different-date-range fallback.

@@ -427,25 +427,44 @@ def fetch_ssdata_raw(startdate, enddate=0):
     return raw_df
 
 
-def build_ssdata(raw_df, minvol=5000000, percshort=50.00, etfs=0):
+# Mirrors percentBuckets in static/js/treemap.js -- that's what actually
+# groups/colors the treemap, this is what decides which rows are even
+# eligible to show up there. Keep the two in sync if the ranges ever change.
+PERCENT_BUCKETS = {
+    "50plus": (0.50, float('inf')),
+    "40to50": (0.40, 0.50),
+    "30to40": (0.30, 0.40),
+    "under30": (float('-inf'), 0.30),
+}
+
+
+def build_ssdata(raw_df, minvol=5000000, percbuckets="50plus,40to50,30to40,under30", etfs=0):
     """Filter/aggregate already-fetched raw FINRA data into the treemap and
     detail views. Pure in-memory pandas work, no network or DB access, so
-    it's cheap to re-run on every filter (slider) change.
+    it's cheap to re-run on every filter (toggle) change.
     """
     src_dir = os.path.dirname(os.path.abspath(__file__))
     # Flask route params arrive as strings; the old SQL-side filter let
     # Postgres coerce them implicitly, but pandas comparisons need explicit
     # numeric types.
     minvol = int(minvol)
-    percshort = float(percshort)
+    selected_buckets = [b for b in percbuckets.split(",") if b in PERCENT_BUCKETS]
 
     if raw_df.empty:
         empty = raw_df.to_json(orient='records')
         return [empty, empty]
 
+    pct = raw_df["ShortVolume"] / raw_df["TotalVolume"]
+    # No buckets selected genuinely means "show nothing" -- not a fallback
+    # to "show everything", which would be surprising if someone unchecks
+    # every toggle on purpose.
+    bucket_mask = pd.Series(False, index=raw_df.index)
+    for bucket in selected_buckets:
+        lo, hi = PERCENT_BUCKETS[bucket]
+        bucket_mask |= (pct >= lo) & (pct < hi)
+
     finra_df = raw_df[
-        (raw_df["TotalVolume"] > minvol) &
-        ((raw_df["ShortVolume"] / raw_df["TotalVolume"]) >= (percshort / 100))
+        (raw_df["TotalVolume"] > minvol) & bucket_mask
     ].copy()
 
     if finra_df.empty:

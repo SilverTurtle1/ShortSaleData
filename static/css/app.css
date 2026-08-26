@@ -240,7 +240,8 @@ body.body-main {
 /* ---------------------------------------------------------------------
    ETF checkbox chips
 --------------------------------------------------------------------- */
-#checkboxes {
+#checkboxes,
+#percbucket-toggles {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -250,7 +251,8 @@ body.body-main {
   display: none;
 }
 
-#checkboxes label {
+#checkboxes label,
+#percbucket-toggles label {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -265,18 +267,21 @@ body.body-main {
   transition: all 0.12s ease;
 }
 
-#checkboxes label:hover {
+#checkboxes label:hover,
+#percbucket-toggles label:hover {
   border-color: var(--accent);
   color: var(--text);
 }
 
-#checkboxes input[type="checkbox"] {
+#checkboxes input[type="checkbox"],
+#percbucket-toggles input[type="checkbox"] {
   accent-color: var(--accent);
   margin: 0;
   cursor: pointer;
 }
 
-#checkboxes label:has(input:checked) {
+#checkboxes label:has(input:checked),
+#percbucket-toggles label:has(input:checked) {
   background: var(--accent-soft);
   border-color: var(--accent);
   color: var(--accent-hover);
