@@ -74,6 +74,27 @@ def get_company_name(symbol):
     return match.iloc[0] if not match.empty else None
 
 
+def get_symbol_detail(symbol, enddate, days=30):
+    """A single symbol's daily rows for the trailing `days` window ending
+    on (and including) enddate. Queries the DB directly rather than
+    relying on any request-scoped cache, since callers like the Daily
+    Buys report drill-down have no prior wide-range fetch to reuse --
+    it's meant for a quick, targeted lookup, not a bulk range.
+    """
+    cutoff = (datetime.strptime(enddate, '%Y%m%d') - timedelta(days=days)).strftime('%Y%m%d')
+    engine = get_engine_from_settings()
+    try:
+        select = text("""
+            SELECT "Date", "Symbol", "ShortVolume", "TotalVolume", "Close"
+            FROM "FINRAFileDetail"
+            WHERE "Symbol" = :symbol AND "Date" <= :enddate AND "Date" >= :cutoff
+            ORDER BY "Date"
+        """).bindparams(symbol=symbol, enddate=int(enddate), cutoff=int(cutoff))
+        return pd.read_sql(select, engine)
+    finally:
+        engine.dispose()
+
+
 def is_today_pacific(yyyymmdd):
     # FINRA doesn't publish a trading day's short-volume file until
     # roughly mid-afternoon Pacific time. Comparing in the server's own

@@ -5,7 +5,7 @@ import os
 import pandas as pd
 from flask import Flask, render_template, jsonify, request
 
-from finra import fetch_ssdata_raw, build_ssdata, get_company_name
+from finra import fetch_ssdata_raw, build_ssdata, get_company_name, get_symbol_detail
 from reports import REPORTS, run_report
 
 # Initiate Flask Application
@@ -132,6 +132,23 @@ def reports_run(report_key):
         raw_params = {name: request.args.get(name) for name in param_names}
         columns, rows = run_report(report_key, raw_params)
         return jsonify({"columns": columns, "rows": rows})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route('/reports/symbol_detail/<symbol>/<date>')
+def reports_symbol_detail(symbol, date):
+    # Powers the drill-down modal from a report row -- a symbol's own
+    # trailing-30-day trend leading up to the flagged date, independent
+    # of whatever report/date-range produced that row.
+    try:
+        df = get_symbol_detail(symbol, date)
+        if df.empty:
+            return '[]'
+        df["LongVolume"] = df["TotalVolume"] - df["ShortVolume"]
+        df["Date"] = pd.to_datetime(df["Date"], format='%Y%m%d').dt.strftime('%m-%d-%Y')
+        df["CompanyName"] = get_company_name(symbol)
+        return df.to_json(orient='records')
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 

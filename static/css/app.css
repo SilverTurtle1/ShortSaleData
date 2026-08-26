@@ -809,6 +809,16 @@ button {
   text-align: right;
 }
 
+.report-symbol-link {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.report-symbol-link:hover {
+  text-decoration: underline;
+}
+
 .report-table td.value-extreme {
   color: var(--accent-hover);
   font-weight: 600;

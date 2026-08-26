@@ -136,11 +136,21 @@
         var columnMeta = REPORTS[activeKey].columns;
         var displayColumns = columnMeta
             ? columnMeta.map(function(c) {
-                return {index: columns.indexOf(c.name), label: c.label, format: c.format};
+                return {index: columns.indexOf(c.name), label: c.label, format: c.format, name: c.name};
             })
             : columns.map(function(c, i) {
-                return {index: i, label: c, format: null};
+                return {index: i, label: c, format: null, name: c};
             });
+
+        // The symbol drill-down modal needs the row's own date, even
+        // though "date" isn't necessarily a displayed column (Daily Buys
+        // hides it since it's a single-value report input, not per-row
+        // data). Only enabled when the raw result actually has both --
+        // a report like Ticker Detail is already scoped to one symbol
+        // across many dates, so there's nothing meaningful to drill into.
+        var symbolIndex = columns.indexOf('symbol');
+        var dateIndex = columns.indexOf('date');
+        var canDrillDown = symbolIndex !== -1 && dateIndex !== -1;
 
         var thead = document.createElement('thead');
         var headRow = document.createElement('tr');
@@ -175,7 +185,19 @@
                 if (dc.format === 'multiplier' && typeof value === 'number' && value >= EXTREME_MULTIPLIER) {
                     td.classList.add('value-extreme');
                 }
-                td.textContent = formatValue(value, dc.format);
+                if (canDrillDown && dc.name === 'symbol') {
+                    var link = document.createElement('a');
+                    link.href = '#';
+                    link.className = 'report-symbol-link';
+                    link.textContent = value;
+                    link.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        populateSymbolModal(row[symbolIndex], row[dateIndex]);
+                    });
+                    td.appendChild(link);
+                } else {
+                    td.textContent = formatValue(value, dc.format);
+                }
                 tr.appendChild(td);
             });
             tbody.appendChild(tr);

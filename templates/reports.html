@@ -51,6 +51,21 @@
     </div>
 </div>
 
+<section class="modal hidden">
+  <div class="flex">
+    <div>
+      <h3>Daily Off-Exchange Volume</h3>
+      <p id="modal-subtitle"></p>
+    </div>
+    <button class="btn-close">⨉</button>
+  </div>
+  <div id="svg_detail"></div>
+</section>
+
+<div class="overlay hidden"></div>
+
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="/static/js/barchart.js"></script>
 <script>
     // Embeds the report registry so the frontend can build forms without
     // a separate round trip.
@@ -59,5 +74,47 @@
 <script src="/static/js/publish-time.js"></script>
 <script src="/static/js/reports.js"></script>
 <script src="/static/js/theme.js"></script>
+<script>
+    // Drill-down modal for a report row's symbol -- its own trailing
+    // 30-day trend leading up to the flagged date, fetched fresh (not
+    // from any cache) since a report result isn't a wide date-range fetch
+    // the way the main treemap page's is.
+    const modal = document.querySelector(".modal");
+    const overlay = document.querySelector(".overlay");
+    const closeModalBtn = document.querySelector(".btn-close");
+
+    function loadModal() {
+        modal.classList.remove("hidden");
+        overlay.classList.remove("hidden");
+    }
+
+    const closeModal = function () {
+        modal.classList.add("hidden");
+        overlay.classList.add("hidden");
+    };
+
+    closeModalBtn.addEventListener("click", closeModal);
+    overlay.addEventListener("click", closeModal);
+
+    document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape" && !modal.classList.contains("hidden")) {
+            closeModal();
+        }
+    });
+
+    // dateYYYYMMDD: the row's own date value, not necessarily "today" --
+    // the window is always the 30 days trailing that specific date.
+    function populateSymbolModal(symbol, dateYYYYMMDD) {
+        loadModal();
+        fetch('/reports/symbol_detail/' + symbol + '/' + dateYYYYMMDD)
+            .then(function(response) { return response.json(); })
+            .then(function(data) {
+                renderJSONBarChart(data);
+                var companyName = data.length ? data[0].CompanyName : null;
+                document.getElementById("modal-subtitle").textContent =
+                    companyName ? `${symbol} — ${companyName}` : symbol;
+            });
+    }
+</script>
 </body>
 </html>
