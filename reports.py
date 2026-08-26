@@ -23,7 +23,7 @@ REPORTS = {
         "params": [
             {"name": "date", "label": "Date", "input": "date", "cast": "yyyymmdd"},
             {"name": "vol", "label": "Min Total Volume", "input": "number", "cast": "int", "default": 5000000, "step": 100000},
-            {"name": "shortperc", "label": "Min Buy % (0-1)", "input": "number", "cast": "float", "default": 0.4, "step": 0.01, "min": 0, "max": 1},
+            {"name": "shortperc", "label": "Min Buy % (0-1)", "input": "number", "cast": "float", "default": 0.5, "step": 0.01, "min": 0, "max": 1},
             {"name": "volpercent", "label": "Min Volume vs Avg (x)", "input": "number", "cast": "float", "default": 1.5, "step": 0.1, "min": 0},
         ],
     },
