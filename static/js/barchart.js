@@ -13,7 +13,7 @@ function createBarChart(data) {
   // or overlapping -- a 7-day treemap range and a 30-day report
   // drill-down both need to stay readable, so this scales with however
   // many points there actually are instead of a fixed width.
-  const pointSpacing = 26;
+  const pointSpacing = 32;
   const outerWidth = Math.max(640, sorted.length * pointSpacing + margin.left + margin.right);
   const width = outerWidth - margin.left - margin.right,
       height = 340 - margin.top - margin.bottom - 32; // reserve room for the legend
@@ -176,6 +176,10 @@ function parseChartDate(mmddyyyy) {
 // labels to overlap into an unreadable smear. Drop the year entirely
 // when it doesn't vary across the range; when it does, show it only at
 // the tick(s) where it changes rather than on every single label.
+//
+// Numeric M/D rather than "Mon DD" -- narrower text at the same spacing
+// leaves more of a gap between adjacent labels before they touch, on
+// top of the point spacing itself.
 function dateTickFormat(sortedRows) {
   const years = sortedRows.map(d => parseChartDate(d.Date).getFullYear());
   const spansMultipleYears = new Set(years).size > 1;
@@ -183,13 +187,13 @@ function dateTickFormat(sortedRows) {
 
   return function(dateStr) {
     const date = parseChartDate(dateStr);
-    const monthDay = date.toLocaleDateString("en-US", {month: "short", day: "numeric"});
+    const monthDay = `${date.getMonth() + 1}/${date.getDate()}`;
     if (!spansMultipleYears) return monthDay;
 
     const year = date.getFullYear();
     const showYear = year !== lastYear;
     lastYear = year;
-    return showYear ? `${monthDay}, ${year}` : monthDay;
+    return showYear ? `${monthDay}/${String(year).slice(2)}` : monthDay;
   };
 }
 
