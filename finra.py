@@ -19,6 +19,7 @@ from sqlalchemy_utils import database_exists, create_database
 
 from polygon import RESTClient
 from polygon.exceptions import BadResponse, AuthError
+from urllib3.exceptions import MaxRetryError
 
 try:
     # local_settings.py is gitignored and only present for local development.
@@ -43,6 +44,13 @@ except ImportError:
         'pgdb': os.environ.get('PG_RENDER_DB', 'alpha_flsq'),
     }
     apikey = os.environ.get('POLYGON_API_KEY')
+
+# Polygon's free tier allows 5 calls/min, shared with ESFuturesData on the
+# same account -- pace grouped-aggs calls to stay under that ourselves
+# rather than relying on the client's own retry (which just gives up and
+# raises after enough 429s, see MaxRetryError below). 12.5s comfortably
+# clears the 12s/call floor 5-per-minute implies.
+POLYGON_MIN_CALL_INTERVAL = 12.5
 
 finra_dir = r'https://cdn.finra.org/equity/regsho/daily/CNMSshvol'
 data_dir = r'static/data/'
@@ -296,6 +304,7 @@ def fetch_ssdata_raw(startdate, enddate=0):
             )
         '''
 
+        last_polygon_call = None
         for d in dates:
             finra_file = finra_dir + f'{d}.txt'
             try:
@@ -318,6 +327,11 @@ def fetch_ssdata_raw(startdate, enddate=0):
                 conn.commit()
 
                 try:
+                    if last_polygon_call is not None:
+                        wait = POLYGON_MIN_CALL_INTERVAL - (time.time() - last_polygon_call)
+                        if wait > 0:
+                            time.sleep(wait)
+                    last_polygon_call = time.time()
                     client = RESTClient(apikey)
                     aggs = client.get_grouped_daily_aggs(f"{d[:4]}-{d[4:6]}-{d[6:]}")
                     data = []
@@ -327,18 +341,22 @@ def fetch_ssdata_raw(startdate, enddate=0):
                             "Close": agg.close
                         })
                     polygondf = pd.DataFrame(data)
-                except (BadResponse, AuthError) as e:
+                except (BadResponse, AuthError, MaxRetryError) as e:
                     # BadResponse: Polygon rejects grouped-aggregates requests
                     # for the current date until end of day on this account's
                     # tier ("Attempted to request today's data before end of
                     # day"). AuthError: POLYGON_API_KEY isn't configured in
                     # this environment (e.g. missing on a deploy target).
-                    # Neither has anything to do with whether FINRA's own
-                    # short-volume file (already fetched successfully above)
-                    # is available -- fall back to a closing price of NULL
-                    # for this date rather than losing the whole day's
-                    # short-volume data, and every other date in the
-                    # requested range along with it, over a price lookup.
+                    # MaxRetryError: the client's own retries against a 429
+                    # were exhausted -- e.g. ESFuturesData burning the same
+                    # shared rate-limit budget concurrently, despite our own
+                    # pacing above. None of these have anything to do with
+                    # whether FINRA's own short-volume file (already fetched
+                    # successfully above) is available -- fall back to a
+                    # closing price of NULL for this date rather than losing
+                    # the whole day's short-volume data, and every other
+                    # date in the requested range along with it, over a
+                    # price lookup.
                     print(f"[!] Polygon closing prices unavailable for {d}: {e}")
                     polygondf = pd.DataFrame(columns=["Symbol", "Close"])
                 mergeddf = pd.merge(polygondf, ssdata_temp, on='Symbol', how='right')
