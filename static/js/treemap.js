@@ -52,12 +52,7 @@ function percentBucketId(value) {
 // symbols within a bucket by size like the default treemap behavior.
 function bucketAwareSort(a, b) {
   if (a.depth === 1 && b.depth === 1) {
-    // d3.stratify's synthetic ids for path-based hierarchies carry a
-    // leading "/" (e.g. "/45-55%"), which won't match percentBucketOrder
-    // as-is.
-    const aId = a.id.replace(/^\/+/, "");
-    const bId = b.id.replace(/^\/+/, "");
-    return percentBucketOrder.indexOf(aId) - percentBucketOrder.indexOf(bId);
+    return percentBucketOrder.indexOf(a.data.name) - percentBucketOrder.indexOf(b.data.name);
   }
   return d3.descending(a.value, b.value);
 }
@@ -120,7 +115,13 @@ function createTreemap(data, { // data is either tabular (array of objects) or h
   paddingOuter = padding, // shorthand for top, right, bottom, and left padding
   // Reserves a header band at the top of each top-level group's own box
   // (depth 1) for its label, so the label sits in blank space instead of
-  // being hidden behind (or clipped above) the group's leaf cells.
+  // being hidden behind (or clipped above) the group's leaf cells. Safe
+  // to key off depth alone because the hierarchy is now built with
+  // d3.hierarchy(data, children) from an explicitly nested structure --
+  // unlike d3.stratify().path(), it never collapses a single-child
+  // bucket (or a single-leaf bucket) into its parent, so a bucket node
+  // is reliably at depth 1 regardless of how many buckets or leaves
+  // are actually present.
   paddingTop = (node) => node.depth === 1 ? 18 : paddingOuter, // to separate a node’s top edge from its children
   paddingRight = paddingOuter, // to separate a node’s right edge from its children
   paddingBottom = paddingOuter, // to separate a node’s bottom edge from its children
@@ -145,11 +146,15 @@ function createTreemap(data, { // data is either tabular (array of objects) or h
   const root = path != null ? d3.stratify().path(path)(data)
       : id != null || parentId != null ? d3.stratify().id(id).parentId(parentId)(data)
       : d3.hierarchy(data, children);
-//    console.log("root")
-//    console.log(root)
+  // Domain fit from actual leaf data, not the raw `data` input -- the
+  // id/parentId mode's `data` array can include synthetic non-leaf rows
+  // (e.g. one per percent-range bucket, see the treemap call site) that
+  // have no meaningful `size` of their own and would otherwise corrupt
+  // this scale's domain.
+  const leaves = root.leaves();
     var dataScale = d3.scaleLog()
-    .domain([d3.min(data, function(d){return d.size}),
-         d3.max(data, function(d){return d.size})]);
+    .domain([d3.min(leaves, d => d.data.size),
+         d3.max(leaves, d => d.data.size)]);
 
 
     var percentRange = (data, function(d) {
@@ -164,7 +169,6 @@ function createTreemap(data, { // data is either tabular (array of objects) or h
   size == null ? root.count() : root.sum(d => Math.max(0, dataScale(d?.size)));
 
   // Prior to sorting, if a group channel is specified, construct an ordinal color scale.
-  const leaves = root.leaves();
 //  console.log(root)
 //  const G = group == null ? null : leaves.map(d => group(d.data, d));
    Grp = group == null ? null : leaves.map(d => value(d.data, d));
@@ -222,7 +226,12 @@ function createTreemap(data, { // data is either tabular (array of objects) or h
   // bucket) so groups read as distinct sections instead of one seamless
   // tiled surface -- the extra paddingInner above only creates the gap,
   // this is what makes the boundary and its meaning actually visible.
-  if (root.children && root.children.length > 1) {
+  //
+  // root.children are reliably the bucket nodes here (never the leaves
+  // directly, however few buckets or leaves-per-bucket exist) because
+  // the hierarchy comes from d3.hierarchy(data, children), which unlike
+  // d3.stratify().path() never collapses a single-child chain.
+  if (root.children && root.children.length > 0) {
     const groups = svg.append("g").attr("fill", "none");
     groups.selectAll("rect")
       .data(root.children)
@@ -242,7 +251,7 @@ function createTreemap(data, { // data is either tabular (array of objects) or h
       .join("text")
         .attr("x", d => d.x0 + 4)
         .attr("y", d => d.y0 + 12)
-        .text(d => d.id.replace(/^\/+/, ""));
+        .text(d => d.data.name);
   }
 
   const node = svg.selectAll("a")
@@ -359,12 +368,31 @@ const renderJSONTreeMap = (jsonData) => {
 
     var treemapData = jsonData[0]
 
-    treemap = createTreemap(jsonData, {
-        // Group by short% range (not by ETF/Fund) so extreme values
-        // cluster together in one region of the treemap. The full
-        // "Fund.Symbol" name is kept as the leaf's path segment so two
-        // symbols in different funds never collide on the same path.
-        path: d => percentBucketId(d.value) + "/" + d.name,
+    // Group by short% range (not by ETF/Fund) so extreme values cluster
+    // together in one region of the treemap. Built as explicit rows (one
+    // synthetic row per bucket that actually has data, id/parentId-linked
+    // to its leaves) rather than via d3.stratify's `path` convenience --
+    // path-based stratify silently collapses a bucket with only one
+    // symbol (or a lone remaining bucket) into its parent, which is
+    // exactly the case toggling buckets on/off now regularly creates.
+    // Explicit id/parentId rows are never collapsed, whatever the counts.
+    // d3.stratify's id/parentId mode requires exactly one row with no
+    // parent -- an explicit root row, rather than letting every bucket
+    // row claim __parentId: null, which it would reject as "multiple
+    // roots".
+    const rootRow = { __nodeId: "root", __parentId: null, name: "root", size: 0 };
+    const bucketsPresent = new Set(jsonData.map(d => percentBucketId(d.value)));
+    const bucketRows = percentBucketOrder
+        .filter(bucketId => bucketsPresent.has(bucketId))
+        .map(bucketId => ({ __nodeId: "bucket:" + bucketId, __parentId: "root", name: bucketId, size: 0 }));
+    const stratifyRows = [rootRow].concat(bucketRows).concat(jsonData.map(d => Object.assign({}, d, {
+        __nodeId: "leaf:" + d.name,
+        __parentId: "bucket:" + percentBucketId(d.value),
+    })));
+
+    treemap = createTreemap(stratifyRows, {
+        id: d => d.__nodeId,
+        parentId: d => d.__parentId,
         size: d => d?.size, // size of each node (file); null for internal nodes (folders)
         value: d => d?.value, // value attribute of each node (file); null for internal nodes (folders)
         symbol: d => d?.symbol,

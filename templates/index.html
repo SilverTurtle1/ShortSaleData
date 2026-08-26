@@ -111,10 +111,17 @@
             checkbox.value = bucket.value;
             checkbox.id = id;
             checkbox.checked = true;
-            // loadData() is declared in a later <script> block -- wrap in
-            // a closure so it's looked up at click time, not now (it
-            // would be undefined at this point in page load otherwise).
-            checkbox.addEventListener('click', function() { loadData(); });
+            // loadData()/validatePercBuckets() are declared in a later
+            // <script> block -- wrap in a closure so they're looked up
+            // at click time, not now (they'd be undefined at this point
+            // in page load otherwise).
+            checkbox.addEventListener('click', function() {
+                if (validatePercBuckets()) {
+                    loadData();
+                } else {
+                    checkbox.checked = true;
+                }
+            });
 
             label.appendChild(checkbox);
             label.appendChild(document.createTextNode(bucket.label));
@@ -190,21 +197,18 @@
         }
 
         function validateCheckboxes() {
-              const checkboxes = document.querySelectorAll('input[type="checkbox"]');
-              let atLeastOneChecked = false;
+              // Scoped to ETF checkboxes specifically -- querying every
+              // checkbox on the page (including the percbucket toggles,
+              // which default to all-checked) would always find one
+              // checked regardless of ETF state, silently defeating this
+              // guard.
+              const checkboxes = document.querySelectorAll('input[name="fund"]');
+              return Array.from(checkboxes).some((checkbox) => checkbox.checked);
+            }
 
-              for (let i = 0; i < checkboxes.length; i++) {
-                if (checkboxes[i].checked) {
-                  atLeastOneChecked = true;
-                  break; // No need to continue checking once one is found
-                }
-              }
-
-              if (!atLeastOneChecked) {
-                return false; // Prevent form submission
-              }
-
-              return true; // Allow form submission
+        function validatePercBuckets() {
+              const checkboxes = document.querySelectorAll('input[name="percbucket"]');
+              return Array.from(checkboxes).some((checkbox) => checkbox.checked);
             }
 
         const funds = ["SPX","XLB","XLC","XLE","XLF","XLI","XLK","XLP","XLU","XLV","XLY", "XRT","Other"];
