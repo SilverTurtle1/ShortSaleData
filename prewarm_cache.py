@@ -16,6 +16,8 @@ run do any real work.
 """
 from datetime import datetime, timedelta
 
+import pytz
+
 from finra import fetch_ssdata_raw
 
 # Covers a full "This Month"-sized request plus slack, without making a
@@ -25,7 +27,17 @@ BACKFILL_DAYS = 40
 
 
 def main():
-    end = datetime.today()
+    # finra.py's is_today_pacific() decides whether a fetch failure gets
+    # permanently cached as "no file" using Pacific time -- anchoring the
+    # end of this range to the container's raw clock (Render runs UTC)
+    # instead risks requesting a date Pacific hasn't reached yet whenever
+    # this runs (or is manually triggered) after 5pm PT/PDT, when UTC has
+    # already rolled to the next calendar day. FINRA correctly 403s that
+    # not-yet-started date, but is_today_pacific() then says it's *not*
+    # today, so the failure gets cached as permanent instead of retried
+    # tomorrow -- reintroducing the exact stale-NULL bug this project
+    # already fixed once for the live request path.
+    end = datetime.now(pytz.timezone('US/Pacific'))
     start = end - timedelta(days=BACKFILL_DAYS)
     startdate = start.strftime('%Y%m%d')
     enddate = end.strftime('%Y%m%d')
