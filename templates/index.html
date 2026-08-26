@@ -113,6 +113,7 @@
 
 
 
+                document.getElementById("treemap-error").classList.add("hidden");
                 fetch('/treemap/'+ start +'/'+ end + '/' + minvol + '/' + percshort + '/' + values)
                     .then(function(response){
                         response.json().then(function(response){
@@ -121,20 +122,21 @@
                             spinner.classList.add("loader-hidden");
                         })
                     .catch(function(err) {
-                        start = moment().subtract(3, 'days').startOf('day').format('YYYYMMDD');
-                        end = moment().endOf('day').format('YYYYMMDD');
-                         fetch('/treemap/'+ start +'/'+ end + '/' + minvol + '/' + percshort + '/' + values)
-                        .then(function(response){
-                            response.json().then(function(response){
-                                renderJSONTreeMap(response);
-                                var spinner = document.querySelector(".loader");
-                                spinner.classList.add("loader-hidden");
-                            })
-                        })
-                        start = moment().subtract(3, 'days').startOf('day').format('MM/DD/YYYY');
-                        end = end = moment().endOf('day').format('MM/DD/YYYY');
-                        document.getElementById("datetimerange-input1").value = start + " - " + end;
-
+                        // Was previously silently swapping in a hardcoded
+                        // "last 3 days" range and overwriting the visible
+                        // date picker with it, unconditionally -- so a
+                        // real failure (e.g. the server timing out on a
+                        // wide, mostly-uncached range and Render returning
+                        // a 502/504 HTML page instead of JSON, which fails
+                        // to parse here) looked exactly like the user had
+                        // picked a different, much narrower date range.
+                        // Surface it instead of masking it.
+                        console.error("Failed to load treemap data:", err);
+                        var spinner = document.querySelector(".loader");
+                        spinner.classList.add("loader-hidden");
+                        document.getElementById("treemap-error").textContent =
+                            "Couldn't load data for this range. It may be too wide to fetch in one request -- try a smaller range, or try again.";
+                        document.getElementById("treemap-error").classList.remove("hidden");
                     })
 
 
@@ -217,6 +219,7 @@
     </script>
 
     <div class="panel treemap-panel">
+        <div id="treemap-error" class="treemap-error hidden"></div>
         <div class="svg" id="svg_container"></div>
     </div>
 </div>

@@ -288,7 +288,8 @@ body.body-main {
 --------------------------------------------------------------------- */
 .treemap-panel {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
   padding: 18px;
   overflow-x: auto;
 }
@@ -416,6 +417,18 @@ button {
 
 .hidden {
   display: none;
+}
+
+.treemap-error {
+  font-size: 13px;
+  color: #c0392b;
+  background: rgba(192, 57, 43, 0.1);
+  border: 1px solid rgba(192, 57, 43, 0.3);
+  border-radius: 6px;
+  padding: 10px 14px;
+  width: 100%;
+  flex: 0 0 auto;
+  align-self: flex-start;
 }
 
 /* ---------------------------------------------------------------------
