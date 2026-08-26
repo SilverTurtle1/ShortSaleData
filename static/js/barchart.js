@@ -8,8 +8,14 @@ function createBarChart(data) {
   // being something you have to eyeball as a fraction of a stacked
   // bar's length. Volume stays visible as a secondary, lighter-weight
   // encoding (bars) rather than competing for the same axis.
-  const margin = {top: 16, right: 46, bottom: 40, left: 40},
-      width = 640 - margin.left - margin.right,
+  const margin = {top: 16, right: 46, bottom: 40, left: 40};
+  // Comfortable spacing per data point before date labels start crowding
+  // or overlapping -- a 7-day treemap range and a 30-day report
+  // drill-down both need to stay readable, so this scales with however
+  // many points there actually are instead of a fixed width.
+  const pointSpacing = 26;
+  const outerWidth = Math.max(640, sorted.length * pointSpacing + margin.left + margin.right);
+  const width = outerWidth - margin.left - margin.right,
       height = 340 - margin.top - margin.bottom - 32; // reserve room for the legend
 
   const dark = document.documentElement.getAttribute("data-theme") === "dark";
@@ -22,7 +28,7 @@ function createBarChart(data) {
   const refLineColor = dark ? "#3a3d47" : "#c7cad1";
 
   const svg = d3.create("svg")
-      .attr("width", 640)
+      .attr("width", outerWidth)
       .attr("height", 340)
       .attr("font-family", "Roboto, sans-serif");
 
@@ -35,8 +41,13 @@ function createBarChart(data) {
       .padding(0.5);
 
   const yPct = d3.scaleLinear().domain([0, 100]).range([height, 0]);
-  const yVol = d3.scaleLinear()
-      .domain([0, d3.max(sorted, d => d.TotalVolume)]).nice()
+  // Log, not linear -- this chart's whole purpose is showing symbols
+  // with an unusual volume spike, so the flagged day is routinely an
+  // order of magnitude (or more) above the symbol's normal days. On a
+  // linear scale that outlier stretches the axis until every other
+  // day's bar rounds down to an invisible sliver.
+  const yVol = d3.scaleLog()
+      .domain([Math.max(1, d3.min(sorted, d => d.TotalVolume)), d3.max(sorted, d => d.TotalVolume)])
       .range([height, 0]);
 
   const pctOf = d => (d.ShortVolume / d.TotalVolume) * 100;
@@ -111,7 +122,11 @@ function createBarChart(data) {
 
   chart.append("g")
       .attr("transform", `translate(${width},0)`)
-      .call(d3.axisRight(yVol).ticks(4).tickFormat(d => `${(d / 1000000).toFixed(0)}M`))
+      // Log scale ticks span a much wider range of magnitudes than a
+      // linear axis would (e.g. 200K up to 300M on the same axis) --
+      // a fixed "always millions" format rounds every sub-1M tick down
+      // to a meaningless "0M".
+      .call(d3.axisRight(yVol).ticks(4).tickFormat(d => d >= 1000000 ? `${(d / 1000000).toFixed(0)}M` : `${(d / 1000).toFixed(0)}K`))
       .call(g => g.select(".domain").remove())
       .call(g => g.selectAll("line").remove())
       .call(g => g.selectAll("text").attr("fill", "var(--text-faint)").attr("font-size", 10));

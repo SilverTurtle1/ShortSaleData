@@ -333,7 +333,10 @@ body.body-main {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  width: 700px;
+  /* Wide enough for a ~30-point chart (see pointSpacing in
+     barchart.js) without cramping; overflow:auto below lets an even
+     wider chart scroll horizontally rather than get clipped. */
+  width: 940px;
   max-width: calc(100vw - 40px);
   height: 460px;
   max-height: calc(100vh - 40px);
@@ -372,7 +375,10 @@ body.body-main {
   font-family: "Roboto", "Helvetica Neue", Helvetica, Arial, sans-serif;
   margin: auto;
   position: relative;
-  width: 640px;
+  /* No fixed width -- the chart itself sizes its own <svg> width based
+     on how many data points it's rendering (see pointSpacing in
+     barchart.js); this just needs to not clip it. */
+  max-width: 100%;
 }
 
 #svg_detail .node {
