@@ -416,6 +416,31 @@ button {
   color: var(--text);
 }
 
+.modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text-muted);
+  border-radius: 50%;
+  font-size: 14px;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.btn-copy:hover {
+  background: var(--border);
+  color: var(--text);
+}
+
 .info-toggle {
   display: inline-flex;
   align-items: center;

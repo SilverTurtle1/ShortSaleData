@@ -204,3 +204,89 @@ const renderJSONBarChart = (jsonData) => {
     if (typeof oldBarChart === 'undefined') document.getElementById("svg_detail").appendChild(barchart);
            else document.getElementById("svg_detail").replaceChild(barchart, oldBarChart);
 }
+
+// Rasterizes the rendered chart (plus a title line) to a PNG. The chart
+// is styled with CSS variables (var(--border), var(--text-muted), ...),
+// which don't exist once the SVG is serialized into a standalone image,
+// so they're resolved to the current theme's concrete colors first --
+// the copied image matches whatever theme is on screen.
+function chartToPngBlob(svgEl, title) {
+  const rootStyle = getComputedStyle(document.documentElement);
+  const resolveVars = value => value.replace(/var\((--[\w-]+)\)/g,
+      (_, name) => rootStyle.getPropertyValue(name).trim());
+
+  const clone = svgEl.cloneNode(true);
+  [clone, ...clone.querySelectorAll("*")].forEach(el => {
+    for (const attr of Array.from(el.attributes)) {
+      if (attr.value.includes("var(")) el.setAttribute(attr.name, resolveVars(attr.value));
+    }
+  });
+  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+
+  const width = Number(svgEl.getAttribute("width"));
+  const height = Number(svgEl.getAttribute("height"));
+  const headerHeight = title ? 36 : 12;
+  const scale = 2; // retina-sharp when pasted into a doc or chat
+  const bg = rootStyle.getPropertyValue("--panel-bg").trim() || "#ffffff";
+  const textColor = rootStyle.getPropertyValue("--text").trim() || "#000000";
+
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = width * scale;
+      canvas.height = (height + headerHeight) * scale;
+      const ctx = canvas.getContext("2d");
+      ctx.scale(scale, scale);
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, width, height + headerHeight);
+      if (title) {
+        ctx.fillStyle = textColor;
+        ctx.font = "500 15px Roboto, Helvetica, Arial, sans-serif";
+        ctx.textBaseline = "middle";
+        ctx.fillText(title, 40, headerHeight / 2 + 2);
+      }
+      ctx.drawImage(img, 0, headerHeight, width, height);
+      canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error("PNG encoding failed")), "image/png");
+    };
+    img.onerror = () => reject(new Error("Chart image failed to load"));
+    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(new XMLSerializer().serializeToString(clone));
+  });
+}
+
+// Wired to the modal's copy button. Copies the chart image to the
+// clipboard; where the async Clipboard API isn't available (older
+// browsers, or a non-HTTPS origin), downloads the PNG instead.
+function copyChartImage(button) {
+  const svgEl = document.querySelector("#svg_detail svg");
+  if (!svgEl) return;
+
+  const subtitle = document.getElementById("modal-subtitle");
+  const title = `${subtitle ? subtitle.textContent : ""} \u2014 Daily Off-Exchange Volume`.replace(/^ \u2014 /, "");
+  const blobPromise = chartToPngBlob(svgEl, title);
+  const original = button.innerHTML;
+  const flash = (html, tip) => {
+    button.innerHTML = html;
+    button.title = tip;
+    setTimeout(() => { button.innerHTML = original; button.title = "Copy chart as image"; }, 1500);
+  };
+
+  const canCopy = navigator.clipboard && navigator.clipboard.write && typeof ClipboardItem !== "undefined";
+  if (canCopy) {
+    // Handing ClipboardItem the promise (not the resolved blob) keeps
+    // Safari happy -- it requires write() to be called synchronously
+    // inside the click handler.
+    navigator.clipboard.write([new ClipboardItem({"image/png": blobPromise})])
+        .then(() => flash("\u2713", "Copied!"))
+        .catch(() => flash("!", "Copy failed"));
+  } else {
+    blobPromise.then(blob => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "off-exchange-volume.png";
+      a.click();
+      URL.revokeObjectURL(a.href);
+      flash("\u2713", "Downloaded");
+    }).catch(() => flash("!", "Copy failed"));
+  }
+}
