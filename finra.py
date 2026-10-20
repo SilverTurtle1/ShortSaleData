@@ -71,7 +71,10 @@ def get_company_name(symbol):
     src_dir = os.path.dirname(os.path.abspath(__file__))
     etf_df = pd.read_csv(os.path.join(src_dir, data_dir, mapping_file))
     match = etf_df.loc[etf_df["Symbol"] == symbol, "Name"]
-    return match.iloc[0] if not match.empty else None
+    # A symbol can be in the mapping with a blank name, which pandas reads
+    # as NaN -- and NaN serializes to the bare token NaN, which isn't valid
+    # JSON and breaks any endpoint that returns it.
+    return match.iloc[0] if not match.empty and pd.notna(match.iloc[0]) else None
 
 
 def get_symbol_detail(symbol, enddate, days=30):
