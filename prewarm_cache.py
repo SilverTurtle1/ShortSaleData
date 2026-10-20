@@ -18,7 +18,7 @@ from datetime import datetime, timedelta
 
 import pytz
 
-from finra import ensure_ssdata_cached, trim_old_data
+from finra import adjust_closes_for_splits, ensure_ssdata_cached, trim_old_data
 
 # Covers a full "This Month"-sized request plus slack, without making a
 # single cron run walk back further than necessary against the shared
@@ -51,6 +51,17 @@ def main():
     # warms -- letting it grow forever is what filled the production
     # disk once already.
     trim_old_data()
+
+    # Cached closes go stale when a stock splits (older rows keep the old
+    # price basis) -- re-pull adjusted prices for anything that split in
+    # the last couple of weeks. Only splits not yet handled do real work,
+    # so on most days this is a single cheap listing call. The one-time
+    # backlog is fix_split_closes.py's job, not the daily run's. A failure
+    # here shouldn't fail the cache warming that already succeeded.
+    try:
+        adjust_closes_for_splits(lookback_days=14)
+    except Exception as err:
+        print(f"adjust_closes_for_splits failed: {err}")
 
     print("Done.")
 

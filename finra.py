@@ -359,6 +359,186 @@ def trim_old_data(retention_days=DEFAULT_RETENTION_DAYS):
         engine.dispose()
 
 
+def _paced_polygon_call(state):
+    """Sleep as needed to stay under the shared Polygon rate limit, then
+    record the call. `state` is a one-item list holding the last call time
+    (mutable so callers share one pacing clock)."""
+    if state[0] is not None:
+        wait = POLYGON_MIN_CALL_INTERVAL - (time.time() - state[0])
+        if wait > 0:
+            time.sleep(wait)
+    state[0] = time.time()
+
+
+def adjust_closes_for_splits(lookback_days=None, symbols=None, dry_run=False,
+                             chunk_size=40, max_symbols=None):
+    """Re-pull split-adjusted closing prices for every stored symbol that
+    has had a stock split since some of its rows were cached.
+
+    Why this exists: Polygon serves closes adjusted to *today's* split
+    basis, but we cache each date's close once, at whatever basis was true
+    when it was fetched -- and never revisit it. After a split, a symbol's
+    older cached rows (old basis) and rows fetched later (new basis) are
+    mixed, with no record of which is which, producing fake 10x "returns".
+    Adjusting rows by the split ratio isn't safe for that reason (it would
+    double-adjust the rows that are already right), so the only reliable
+    repair is to re-fetch the symbol's whole stored history in one
+    adjusted get_aggs call and overwrite its closes.
+
+    Each (symbol, split execution date) is recorded in "SplitAdjustments"
+    once handled, so this is resumable and cheap to run repeatedly -- a
+    daily run only does real work for splits it hasn't seen.
+
+    lookback_days: only consider splits executed in the last N days (the
+        daily cron's mode). None = everything since the oldest stored row
+        (the one-time backlog; ~1 Polygon call per affected symbol at the
+        shared 5/min limit, so potentially hours).
+    symbols: optionally restrict to these tickers.
+    dry_run: report what would be fetched, change nothing, make no
+        per-symbol Polygon calls.
+    max_symbols: stop after this many symbols (testing / partial runs).
+    """
+    pacific_today = datetime.now(pytz.timezone('US/Pacific')).date()
+    # A split's adjusted data is only reliable once its execution date has
+    # passed, and the same-day-data restriction on the free tier applies
+    # to prices too -- so only events strictly before today, prices only
+    # through yesterday.
+    yesterday = pacific_today - timedelta(days=1)
+    engine = get_engine_from_settings()
+    client = RESTClient(apikey)
+    pace = [None]
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS "SplitAdjustments" (
+                    "Symbol" VARCHAR(10) NOT NULL,
+                    "ExecutionDate" BIGINT NOT NULL,
+                    "SplitFrom" DOUBLE PRECISION,
+                    "SplitTo" DOUBLE PRECISION,
+                    "AdjustedAt" TIMESTAMP DEFAULT now(),
+                    PRIMARY KEY ("Symbol", "ExecutionDate")
+                )"""))
+            oldest = conn.execute(text('SELECT MIN("Date") FROM "FINRAFileDetail"')).scalar()
+            already = {(r[0], r[1]) for r in conn.execute(
+                text('SELECT "Symbol", "ExecutionDate" FROM "SplitAdjustments"')).fetchall()}
+        if oldest is None:
+            print("adjust_closes_for_splits: no stored data.")
+            return {"symbols": 0, "rows_changed": 0}
+
+        if lookback_days is not None:
+            since = pacific_today - timedelta(days=lookback_days)
+        else:
+            since = datetime.strptime(str(oldest), '%Y%m%d').date()
+
+        print(f"Listing splits executed {since}..{yesterday}")
+        events = []
+        _paced_polygon_call(pace)
+        try:
+            for i, sp in enumerate(client.list_splits(
+                    execution_date_gte=since.isoformat(), execution_date_lte=yesterday.isoformat(),
+                    limit=1000, sort='execution_date', order='asc'), start=1):
+                events.append((sp.ticker, int(sp.execution_date.replace('-', '')), sp.split_from, sp.split_to))
+                if i % 1000 == 0:
+                    time.sleep(POLYGON_MIN_CALL_INTERVAL)  # next page is another call
+        except (BadResponse, AuthError, MaxRetryError) as err:
+            print(f"adjust_closes_for_splits: couldn't list splits ({err}); try again later.")
+            return {"symbols": 0, "rows_changed": 0}
+        if symbols:
+            wanted = set(symbols)
+            events = [e for e in events if e[0] in wanted]
+
+        candidates = sorted({e[0] for e in events})
+        with engine.connect() as conn:
+            stored = {r[0]: (r[1], r[2]) for r in conn.execute(
+                text('SELECT "Symbol", MIN("Date"), MAX("Date") FROM "FINRAFileDetail" '
+                     'WHERE "Symbol" = ANY(CAST(:syms AS text[])) GROUP BY "Symbol"'),
+                {"syms": candidates}).fetchall()}
+            latest = conn.execute(text('SELECT MAX("Date") FROM "FINRAFileDetail"')).scalar()
+            volume = {r[0]: r[1] or 0 for r in conn.execute(
+                text('SELECT "Symbol", "TotalVolume" FROM "FINRAFileDetail" '
+                     'WHERE "Date" = :d AND "Symbol" = ANY(CAST(:syms AS text[]))'),
+                {"d": latest, "syms": candidates}).fetchall()}
+
+        # Only symbols we store with rows from *before* a split we haven't
+        # handled yet -- rows after the split were fetched on the new basis.
+        pending = {}
+        for ticker, exec_date, split_from, split_to in events:
+            if ticker not in stored or (ticker, exec_date) in already:
+                continue
+            if stored[ticker][0] < exec_date:
+                pending.setdefault(ticker, []).append((exec_date, split_from, split_to))
+        # Highest-volume (most visible) symbols first, so an interrupted
+        # backlog run has already fixed the names that matter most.
+        order = sorted(pending, key=lambda t: volume.get(t, 0), reverse=True)
+        if max_symbols is not None:
+            order = order[:max_symbols]
+
+        print(f"{len(order)} symbol(s) need their closes re-fetched "
+              f"(~{len(order) * POLYGON_MIN_CALL_INTERVAL / 60:.0f} min at the Polygon rate limit).")
+        if dry_run:
+            print("Dry run -- first few:", order[:15])
+            return {"symbols": len(order), "rows_changed": 0}
+
+        total_changed = 0
+        buffer = []  # (symbol, [(date_int, close)], events)
+
+        def flush():
+            nonlocal total_changed, buffer
+            if not buffer:
+                return
+            by_date = {}
+            for sym, bars, _ in buffer:
+                for d, close in bars:
+                    by_date.setdefault(d, []).append((sym, close))
+            changed = 0
+            with engine.begin() as conn:
+                # One statement per date: the Date index narrows each to
+                # that day's ~12k rows, instead of scanning the whole table
+                # per symbol (there's no Symbol index).
+                for d, pairs in by_date.items():
+                    result = conn.execute(text("""
+                        UPDATE "FINRAFileDetail" t SET "Close" = v.c
+                        FROM unnest(CAST(:syms AS text[]), CAST(:closes AS float8[])) AS v(s, c)
+                        WHERE t."Date" = :d AND t."Symbol" = v.s AND t."Close" IS DISTINCT FROM v.c
+                    """), {"d": d, "syms": [p[0] for p in pairs], "closes": [p[1] for p in pairs]})
+                    changed += result.rowcount
+                for sym, _, evs in buffer:
+                    for exec_date, split_from, split_to in evs:
+                        conn.execute(text("""
+                            INSERT INTO "SplitAdjustments" ("Symbol", "ExecutionDate", "SplitFrom", "SplitTo")
+                            VALUES (:s, :e, :f, :t) ON CONFLICT DO NOTHING"""),
+                            {"s": sym, "e": exec_date, "f": split_from, "t": split_to})
+            total_changed += changed
+            print(f"  applied {len(buffer)} symbol(s), {changed} rows changed")
+            buffer = []
+
+        ny = pytz.timezone('America/New_York')
+        for n, sym in enumerate(order, start=1):
+            first, last = stored[sym]
+            from_ = datetime.strptime(str(first), '%Y%m%d').date()
+            to_ = min(datetime.strptime(str(last), '%Y%m%d').date(), yesterday)
+            _paced_polygon_call(pace)
+            try:
+                aggs = client.get_aggs(sym, 1, "day", from_.isoformat(), to_.isoformat(),
+                                       adjusted=True, limit=50000)
+            except (BadResponse, AuthError, MaxRetryError) as err:
+                # Not logged as handled, so a later run retries it.
+                print(f"  {sym}: skipped ({err})")
+                continue
+            bars = [(int(datetime.fromtimestamp(a.timestamp / 1000, tz=pytz.utc)
+                         .astimezone(ny).strftime('%Y%m%d')), float(a.close))
+                    for a in aggs if a.close is not None]
+            print(f"[{n}/{len(order)}] {sym}: {len(bars)} bars")
+            buffer.append((sym, bars, pending[sym]))
+            if len(buffer) >= chunk_size:
+                flush()
+        flush()
+        print(f"Done: {len(order)} symbol(s), {total_changed} rows changed.")
+        return {"symbols": len(order), "rows_changed": total_changed}
+    finally:
+        engine.dispose()
+
+
 def ensure_ssdata_cached(startdate, enddate=0):
     """Ensure FINRA/Polygon data for the date range is loaded into Postgres.
     Does not return the data -- see fetch_ssdata_raw() for that.
