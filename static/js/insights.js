@@ -176,6 +176,13 @@
         return row;
     }
 
+    // Average -> current, e.g. "67\u219282%": the levels, rather than a
+    // bare change that reads like a relative % move (it's a difference
+    // between two percentages).
+    function levels(r) {
+        return Math.round(r.avg_short_pct) + '\u2192' + Math.round(r.short_pct) + '%';
+    }
+
     function fullTooltip(r) {
         var parts = [(r.company || r.symbol),
             r.volume_ratio.toFixed(1) + 'x avg volume (' + formatVolume(r.volume) + ')',
@@ -227,9 +234,9 @@
         strip.appendChild(buildStripRow('Volume surges', data.volume_surges,
             function(r) { return r.volume_ratio.toFixed(1) + 'x'; }, fullTooltip, data.as_of));
         strip.appendChild(buildStripRow('Short % jumps', data.short_jumps,
-            function(r) { return '\u25b2' + r.short_change_pts.toFixed(0) + ' pts'; }, fullTooltip, data.as_of));
+            levels, fullTooltip, data.as_of));
         strip.appendChild(buildStripRow('Short % drops', data.short_drops,
-            function(r) { return '\u25bc' + Math.abs(r.short_change_pts).toFixed(0) + ' pts'; }, fullTooltip, data.as_of));
+            levels, fullTooltip, data.as_of));
 
         body.appendChild(buildList('Volume surges', 'Today’s volume vs. average', data.volume_surges,
             function(r) { return r.volume_ratio.toFixed(1) + 'x'; },
@@ -238,10 +245,10 @@
                 return r.price_change_pct === null ? text : text + ' \u00b7 ' + signed(r.price_change_pct) + '% price';
             }, data.as_of));
         body.appendChild(buildList('Short % jumps', 'Biggest rise vs. own average', data.short_jumps,
-            function(r) { return signed(r.short_change_pts) + ' pts'; },
+            function(r) { return signed(r.short_change_pts) + ' pp'; },
             function(r) { return r.short_pct.toFixed(1) + '% vs ' + r.avg_short_pct.toFixed(1) + '% avg'; }, data.as_of));
         body.appendChild(buildList('Short % drops', 'Biggest fall vs. own average', data.short_drops,
-            function(r) { return signed(r.short_change_pts) + ' pts'; },
+            function(r) { return signed(r.short_change_pts) + ' pp'; },
             function(r) { return r.short_pct.toFixed(1) + '% vs ' + r.avg_short_pct.toFixed(1) + '% avg'; }, data.as_of));
     };
 
