@@ -5,7 +5,7 @@ import os
 import pandas as pd
 from flask import Flask, render_template, jsonify, request
 
-from finra import fetch_ssdata_raw, build_ssdata, get_company_name, get_symbol_detail
+from finra import fetch_ssdata_raw, build_ssdata, get_company_name, get_symbol_detail, get_insights
 from reports import REPORTS, run_report
 
 # Initiate Flask Application
@@ -115,6 +115,18 @@ def barchart(symbol):
     temp_df['CompanyName'] = get_company_name(symbol)
     finra_detail = temp_df.to_json(orient='records')
     return finra_detail
+
+
+@app.route('/insights/<end_date>/<min_vol>/<etfs>')
+def insights(end_date, min_vol, etfs):
+    # Unlike /treemap this never touches Polygon or the raw-range cache --
+    # it's a read-only query over data already in the DB, so it's safe to
+    # call alongside (or before) the treemap's own fetch.
+    try:
+        return jsonify(get_insights(end_date, min_vol, [f for f in etfs.split(",") if f]))
+    except Exception as e:
+        print(e)
+        return jsonify({"error": str(e)}), 400
 
 
 @app.route('/reports')

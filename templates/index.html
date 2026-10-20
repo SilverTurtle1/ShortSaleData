@@ -4,6 +4,7 @@
 <script src="/static/js/treemap.js"></script>
 <script src="/static/js/publish-time.js"></script>
 <script src="/static/js/loader.js" defer></script>
+<script src="/static/js/insights.js"></script>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -158,11 +159,13 @@
 
 
 
+                loadInsights(end, minvol, values);
                 document.getElementById("treemap-error").classList.add("hidden");
                 fetch('/treemap/'+ start +'/'+ end + '/' + minvol + '/' + percbuckets + '/' + values)
                     .then(function(response){
                         response.json().then(function(response){
                             renderJSONTreeMap(response);
+                            if (window.applyTileBadges) applyTileBadges();
                             var spinner = document.querySelector(".loader");
                             spinner.classList.add("loader-hidden");
                         })
@@ -191,10 +194,16 @@
         }
 
         var currentModalSymbol = null;
+        var currentModalDate = null;
 
-        function populateBarChart(symbol) {
+        // With a date (opened from the insights panel), the symbol may not
+        // be in the treemap's cached range at all, so query its trailing
+        // 30 days straight from the DB; without one (treemap click), use
+        // the cached range as before.
+        function populateBarChart(symbol, date) {
             currentModalSymbol = symbol;
-            fetch('/barchart/' + symbol)
+            currentModalDate = date || null;
+            fetch(date ? '/reports/symbol_detail/' + symbol + '/' + date : '/barchart/' + symbol)
                 .then(function(response){
                     response.json().then(function(response){
                         renderJSONBarChart(response);
@@ -260,10 +269,25 @@
         });
     </script>
 
+    <div class="panel insights-panel hidden" id="insights-panel">
+        <div class="insights-header">
+            <h3>Unusual activity</h3>
+            <span class="insights-asof" id="insights-asof"></span>
+            <span class="insights-legend"><svg width="26" height="14" aria-hidden="true"><rect width="26" height="14" rx="7" style="fill: var(--accent)"/><text x="13" y="10.5" text-anchor="middle" font-size="9" font-weight="500" style="fill:#fff">2x</text></svg> badge on a tile = volume 2x+ its average</span>
+            <button type="button" class="insights-toggle" id="insights-toggle" aria-expanded="false">Details</button>
+        </div>
+        <div class="insights-strip" id="insights-strip"></div>
+        <div class="insights-details hidden" id="insights-details">
+            <div class="insights-body" id="insights-body"></div>
+            <p class="insights-note">Descriptive only &mdash; our backtests found no reliable predictive edge in short % shifts.</p>
+        </div>
+    </div>
+
     <div class="panel treemap-panel">
         <div id="treemap-error" class="treemap-error hidden"></div>
         <div class="svg" id="svg_container"></div>
     </div>
+
 </div>
 <script>
     function loadData() {
@@ -281,7 +305,7 @@
     function onThemeChange(theme) {
         loadData();
         if (currentModalSymbol && !document.querySelector(".modal").classList.contains("hidden")) {
-            populateBarChart(currentModalSymbol);
+            populateBarChart(currentModalSymbol, currentModalDate);
         }
     }
 </script>
@@ -368,7 +392,12 @@
                 maxDate: todayPublished
                     ? moment().format('MM/DD/YYYY')
                     : moment().subtract(1, 'days').format('MM/DD/YYYY'),
-                opens: 'left',
+                // The date input is the leftmost control, so the popup has
+                // to grow rightward from it. 'left' right-aligns the popup
+                // to the input and grows leftward, which has no room there:
+                // the library falls back to pinning it to the window edge,
+                // detached from the input.
+                opens: 'right',
                 ranges: pickerRanges,
                 locale: {
                     format: "MM/DD/YYYY"

@@ -95,6 +95,126 @@ def get_symbol_detail(symbol, enddate, days=30):
         engine.dispose()
 
 
+INSIGHTS_LOOKBACK_DAYS = 20
+INSIGHTS_SURGE_FLAG_RATIO = 2.0  # volume multiple at which the treemap badges a tile
+INSIGHTS_MIN_HISTORY = 10  # fewer prior days than this and a baseline isn't meaningful
+
+
+def get_insights(enddate, min_volume, funds=None, top_n=8):
+    """What looks unusual on the most recent trading day at or before
+    `enddate`, each symbol measured against its OWN trailing 20 trading
+    days (not against other symbols): volume surges, and the biggest
+    jumps/drops in short % (as z-scores against that symbol's own recent
+    short % behavior, same style of measure as the rolling-z backtests).
+
+    Queries the DB directly -- the treemap's cached range only holds the
+    selected window, which usually has no history before its own start
+    to build a baseline from. `funds` (the treemap's ETF checkboxes)
+    scopes the universe the same way the treemap does; the short-% bucket
+    filter deliberately isn't applied, since it's a filter on the range's
+    *level* and this panel is about *change*.
+    """
+    engine = get_engine_from_settings()
+    try:
+        with engine.connect() as conn:
+            as_of = conn.execute(
+                text('SELECT MAX("Date") FROM "FINRAFileDetail" WHERE "Date" <= :d'),
+                {"d": int(enddate)}).scalar()
+            if as_of is None:
+                return {"as_of": None, "volume_surges": [], "short_jumps": [], "short_drops": []}
+            # Calendar-day cutoff comfortably wide enough for 20 trading days.
+            cutoff = int((datetime.strptime(str(as_of), '%Y%m%d') - timedelta(days=40)).strftime('%Y%m%d'))
+            query = text("""
+                WITH daily AS (
+                    SELECT "Symbol", "Date", "TotalVolume", "Close",
+                           "ShortVolume"::float / "TotalVolume" AS short_pct
+                    FROM "FINRAFileDetail"
+                    WHERE "Date" BETWEEN :cutoff AND :as_of AND "TotalVolume" > 0
+                ),
+                w AS (
+                    SELECT "Symbol", "Date", "TotalVolume", short_pct, "Close",
+                        LAG("Close") OVER (PARTITION BY "Symbol" ORDER BY "Date") AS prev_close,
+                        AVG("TotalVolume") OVER prior AS avg_volume,
+                        AVG(short_pct) OVER prior AS avg_short_pct,
+                        STDDEV(short_pct) OVER prior AS std_short_pct,
+                        COUNT(*) OVER prior AS prior_days
+                    FROM daily
+                    WINDOW prior AS (PARTITION BY "Symbol" ORDER BY "Date"
+                                     ROWS BETWEEN :lookback PRECEDING AND 1 PRECEDING)
+                )
+                SELECT "Symbol" AS symbol, "TotalVolume" AS volume, short_pct,
+                       ("Close" / NULLIF(prev_close, 0) - 1) * 100 AS price_change_pct,
+                       avg_volume, avg_short_pct, std_short_pct
+                FROM w
+                WHERE "Date" = :as_of AND prior_days >= :min_history AND "TotalVolume" >= :min_volume
+            """)
+            df = pd.read_sql(query, conn, params={
+                "cutoff": cutoff, "as_of": int(as_of), "lookback": INSIGHTS_LOOKBACK_DAYS,
+                "min_history": INSIGHTS_MIN_HISTORY, "min_volume": int(min_volume)})
+    finally:
+        engine.dispose()
+
+    if funds:
+        src_dir = os.path.dirname(os.path.abspath(__file__))
+        etf_df = pd.read_csv(os.path.join(src_dir, data_dir, mapping_file))
+        in_scope = etf_df[etf_df["Fund"].isin(funds)]["Symbol"].unique()
+        df = df[df["symbol"].isin(in_scope)]
+
+    if df.empty:
+        # Nothing with enough trailing history (e.g. a gap in the cached
+        # data just before this date) -- report that explicitly instead of
+        # letting the ranking below choke on an empty frame's object dtypes.
+        return {"as_of": int(as_of), "lookback_days": INSIGHTS_LOOKBACK_DAYS, "compared": 0,
+                "surge_flag_ratio": INSIGHTS_SURGE_FLAG_RATIO, "surge_flags": {},
+                "volume_surges": [], "short_jumps": [], "short_drops": []}
+
+    df = df.assign(
+        volume_ratio=df["volume"] / df["avg_volume"],
+        short_z=(df["short_pct"] - df["avg_short_pct"]) / df["std_short_pct"].where(df["std_short_pct"] > 0),
+        short_change_pts=(df["short_pct"] - df["avg_short_pct"]) * 100,
+    )
+
+    def price_change(value):
+        # Close can be missing (same-day price not available yet), and a
+        # |move| this large is far more likely a stale split adjustment in
+        # the cached closes than a real one-day move -- show nothing
+        # rather than a number that looks like a data error.
+        if pd.isna(value) or abs(value) > 50:
+            return None
+        return round(float(value), 1)
+
+    def rows(frame):
+        out = []
+        for r in frame.itertuples():
+            out.append({
+                "symbol": r.symbol,
+                "company": get_company_name(r.symbol),
+                "volume": int(r.volume),
+                "volume_ratio": round(float(r.volume_ratio), 1),
+                "short_pct": round(float(r.short_pct) * 100, 1),
+                "avg_short_pct": round(float(r.avg_short_pct) * 100, 1),
+                "short_change_pts": round(float(r.short_change_pts), 1),
+                "short_z": None if pd.isna(r.short_z) else round(float(r.short_z), 1),
+                "price_change_pct": price_change(r.price_change_pct),
+            })
+        return out
+
+    z = df.dropna(subset=["short_z"])
+    return {
+        "as_of": int(as_of),
+        "lookback_days": INSIGHTS_LOOKBACK_DAYS,
+        "compared": len(df),
+        # Every in-scope symbol at/above the flag ratio (not just the top
+        # few listed) -- the treemap badges all of them.
+        "surge_flag_ratio": INSIGHTS_SURGE_FLAG_RATIO,
+        "surge_flags": {r.symbol: round(float(r.volume_ratio), 1)
+                        for r in df[df["volume_ratio"] >= INSIGHTS_SURGE_FLAG_RATIO].itertuples()},
+        "volume_surges": rows(df.nlargest(top_n, "volume_ratio")),
+        "short_jumps": rows(z[z["short_z"] > 0].nlargest(top_n, "short_z")),
+        "short_drops": rows(z[z["short_z"] < 0].nsmallest(top_n, "short_z")),
+    }
+
+
 def is_today_pacific(yyyymmdd):
     # FINRA doesn't publish a trading day's short-volume file until
     # roughly mid-afternoon Pacific time. Comparing in the server's own
