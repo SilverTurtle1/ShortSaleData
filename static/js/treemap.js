@@ -65,8 +65,59 @@ function bucketAwareSort(a, b) {
 // treemapBinary keep doing its usual (better-looking) job for the
 // symbols tiled within each bucket.
 function bucketAwareTile(node, x0, y0, x1, y1) {
-  (node.depth === 0 ? d3.treemapDice : d3.treemapBinary)(node, x0, y0, x1, y1);
+  (node.depth === 0 ? bucketColumnTile : d3.treemapBinary)(node, x0, y0, x1, y1);
 }
+
+// Like d3.treemapDice (full-height columns, width proportional to value),
+// but no column is narrower than MIN_BUCKET_WIDTH. Plain dice sizes each
+// bucket purely by its total weight, so a bucket holding one or two
+// small symbols becomes a sliver too thin to show a ticker in. Columns
+// that would be too thin are pinned at the minimum and the rest share
+// what's left in proportion to their values. If there's no room for
+// every column at the minimum (many buckets, narrow chart), they split
+// the width evenly instead.
+const MIN_BUCKET_WIDTH = 96;
+
+function bucketColumnTile(node, x0, y0, x1, y1) {
+  const columns = node.children;
+  if (!columns || columns.length === 0) return;
+  const totalWidth = x1 - x0;
+
+  let widths;
+  if (columns.length * MIN_BUCKET_WIDTH >= totalWidth) {
+    widths = columns.map(() => totalWidth / columns.length);
+  } else {
+    const pinned = new Set();
+    widths = [];
+    // Pinning one column shrinks the others' share, which can push
+    // another under the minimum -- repeat until nothing new is pinned.
+    for (;;) {
+      const freeColumns = columns.filter((_, i) => !pinned.has(i));
+      const freeValue = d3.sum(freeColumns, c => c.value);
+      const freeWidth = totalWidth - pinned.size * MIN_BUCKET_WIDTH;
+      let newlyPinned = false;
+      columns.forEach((c, i) => {
+        if (pinned.has(i)) { widths[i] = MIN_BUCKET_WIDTH; return; }
+        widths[i] = freeValue > 0 ? freeWidth * c.value / freeValue : freeWidth / freeColumns.length;
+        if (widths[i] < MIN_BUCKET_WIDTH) { pinned.add(i); newlyPinned = true; }
+      });
+      if (!newlyPinned) break;
+    }
+  }
+
+  let x = x0;
+  columns.forEach((c, i) => {
+    c.x0 = x; c.x1 = x + widths[i];
+    c.y0 = y0; c.y1 = y1;
+    x = c.x1;
+  });
+}
+
+// Smallest area, in px, a single symbol's tile should get -- roughly
+// 60x60, enough for a 5-letter ticker at the 16px label size plus its %
+// line. Treemap area is a share of the total weight, so this becomes a
+// floor on each tile's weight (see tileWeights below).
+const MIN_TILE_AREA = 3600;
 
 function shadeColor(color, percent) {
           // The treemap's color scale outputs "rgb(r, g, b)" strings, not
@@ -83,6 +134,27 @@ function shadeColor(color, percent) {
 
           return c.formatRgb();
       }
+
+// Maps a symbol's 0..1 log-volume position to its tile weight:
+// floor + (100 - floor) * t, with the floor chosen so that the smallest
+// tile ends up with about MIN_TILE_AREA px (a tile's area is its share
+// of the total weight). Solving floor / total = r for the floor, where
+// total = n*floor + (100 - floor)*sum(t), gives the formula below. When
+// there are too many symbols for every tile to get that much room, the
+// target area shrinks to what's feasible (at most ~60% of the chart's
+// area spent on floors) rather than the floor swallowing the volume
+// differences entirely.
+function tileWeights(positions, chartArea) {
+  const n = positions.length;
+  const sumT = d3.sum(positions);
+  // Usable area is less than the full box: group headers and padding.
+  const usableArea = chartArea * 0.8;
+  const r = Math.min(MIN_TILE_AREA / usableArea, 0.6 / Math.max(n, 1));
+  const denominator = 1 - r * n + r * sumT;
+  // sumT === 0 means every symbol has the same volume -- equal weights.
+  const floor = sumT === 0 || denominator <= 0.05 ? 100 : Math.min(100, 100 * r * sumT / denominator);
+  return t => floor + (100 - floor) * t;
+}
 
 function createTreemap(data, { // data is either tabular (array of objects) or hierarchy (nested objects)
   path, // as an alternative to id and parentId, returns an array identifier, imputing internal nodes
@@ -163,10 +235,16 @@ function createTreemap(data, { // data is either tabular (array of objects) or h
     })
 
 
-    dataScale.range([0,100]); //here you can choose a hard coded a
+    // Normalized 0..1 position of each symbol on the log volume scale.
+    // The old fixed 0..100 range gave the lowest-volume symbol a weight
+    // of exactly 0 (and its neighbors almost nothing), so those tiles
+    // rendered as unreadable slivers; weights now have a floor, below.
+    dataScale.range([0,1]);
+    const tileWeight = tileWeights(leaves.map(l => dataScale(l.data.size)),
+        (width - marginLeft - marginRight) * (height - marginTop - marginBottom));
 
   // Compute the size of internal nodes by aggregating from the leaves.
-  size == null ? root.count() : root.sum(d => Math.max(0, dataScale(d?.size)));
+  size == null ? root.count() : root.sum(d => d?.size > 0 ? tileWeight(dataScale(d.size)) : 0);
 
   // Prior to sorting, if a group channel is specified, construct an ordinal color scale.
 //  console.log(root)
@@ -349,7 +427,18 @@ function createTreemap(data, { // data is either tabular (array of objects) or h
 //        .attr("fill-opacity", (d, i, D) => i === D.length - 1 ? 0.7 : null)
         .attr("fill-opacity", (d, i, D) => i === D.length - 1 ? 0.7 : null)
         .text((d, i, D) => i === D.length - 1 ? parseFloat(d*100).toFixed(0)+"%" : d)
-        .attr("font-size", (d, i, D) => i === D.length - 2 ? 16: 12)
+        .attr("font-size", function (d, i, D) {
+          // Normal sizes, shrunk only as far as needed for the text to fit
+          // the tile's width (~0.68em per character, wide capitals like Q/M/C, less a few px of
+          // padding) -- so a ticker is never cut off, even in a tile too
+          // narrow for the full-size label.
+          const isTicker = i === D.length - 2;
+          const normal = isTicker ? 16 : 12;
+          const parentData = d3.select(this.parentNode).datum();
+          const text = i === D.length - 1 ? "100%" : String(d);
+          const fit = (parentData.x1 - parentData.x0 - 7) / (text.length * 0.68);
+          return Math.max(8, Math.min(normal, fit));
+        })
         .style("fill", "var(--text)");
   }
   return Object.assign(svg.node(), {scales: {color}});
@@ -405,7 +494,11 @@ const renderJSONTreeMap = (jsonData) => {
     <!--    link: (d, n) => `https://github.com/prefuse/Flare/blob/master/flare/src${n.id}.as`,-->
         tile: bucketAwareTile,
         width: 1100,
-        height: 480
+        // Grows with the symbol count so every tile can keep a readable
+        // minimum area (see MIN_TILE_AREA) -- 30 symbols fit the default
+        // 480px, a few hundred need a taller chart rather than unreadable
+        // slivers. Capped so a huge result can't make the page endless.
+        height: Math.min(1100, Math.max(480, Math.ceil(jsonData.length * MIN_TILE_AREA / 0.8 / 1100)))
    })
    if (typeof oldtreemap === 'undefined') document.getElementById("svg_container").appendChild(treemap);
    else document.getElementById("svg_container").replaceChild(treemap, oldtreemap);
