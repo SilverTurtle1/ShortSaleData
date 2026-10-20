@@ -100,7 +100,25 @@ INSIGHTS_SURGE_FLAG_RATIO = 2.0  # volume multiple at which the treemap badges a
 INSIGHTS_MIN_HISTORY = 10  # fewer prior days than this and a baseline isn't meaningful
 
 
+# Results for a given (date, volume floor, ETF selection) only change if
+# that day's data does, so a short cache makes repeat loads instant and
+# spares the DB the window-function query. Per worker process, like the
+# treemap's own cache.
+_insights_cache = {}
+INSIGHTS_CACHE_SECONDS = 600
+
+
 def get_insights(enddate, min_volume, funds=None, top_n=8):
+    key = (str(enddate), int(min_volume), tuple(sorted(funds or [])), top_n)
+    hit = _insights_cache.get(key)
+    if hit and time.time() - hit[0] < INSIGHTS_CACHE_SECONDS:
+        return hit[1]
+    result = _compute_insights(enddate, min_volume, funds, top_n)
+    _insights_cache[key] = (time.time(), result)
+    return result
+
+
+def _compute_insights(enddate, min_volume, funds, top_n):
     """What looks unusual on the most recent trading day at or before
     `enddate`, each symbol measured against its OWN trailing 20 trading
     days (not against other symbols): volume surges, and the biggest
@@ -114,6 +132,16 @@ def get_insights(enddate, min_volume, funds=None, top_n=8):
     filter deliberately isn't applied, since it's a filter on the range's
     *level* and this panel is about *change*.
     """
+    # Narrow the query to symbols that can actually appear in the result
+    # (in the selected ETFs, and over the volume floor on the as-of day):
+    # computing rolling windows for all ~12,000 symbols was by far the
+    # dominant cost on the hosted DB, for rows that were then discarded.
+    in_scope = None
+    if funds:
+        src_dir = os.path.dirname(os.path.abspath(__file__))
+        etf_df = pd.read_csv(os.path.join(src_dir, data_dir, mapping_file))
+        in_scope = [str(sym) for sym in etf_df[etf_df["Fund"].isin(funds)]["Symbol"].unique()]
+
     engine = get_engine_from_settings()
     try:
         with engine.connect() as conn:
@@ -125,11 +153,17 @@ def get_insights(enddate, min_volume, funds=None, top_n=8):
             # Calendar-day cutoff comfortably wide enough for 20 trading days.
             cutoff = int((datetime.strptime(str(as_of), '%Y%m%d') - timedelta(days=40)).strftime('%Y%m%d'))
             query = text("""
-                WITH daily AS (
+                WITH scope AS (
+                    SELECT "Symbol" FROM "FINRAFileDetail"
+                    WHERE "Date" = :as_of AND "TotalVolume" >= :min_volume
+                      AND (CAST(:symbols AS text[]) IS NULL OR "Symbol" = ANY(CAST(:symbols AS text[])))
+                ),
+                daily AS (
                     SELECT "Symbol", "Date", "TotalVolume", "Close",
                            "ShortVolume"::float / "TotalVolume" AS short_pct
                     FROM "FINRAFileDetail"
                     WHERE "Date" BETWEEN :cutoff AND :as_of AND "TotalVolume" > 0
+                      AND "Symbol" IN (SELECT "Symbol" FROM scope)
                 ),
                 w AS (
                     SELECT "Symbol", "Date", "TotalVolume", short_pct, "Close",
@@ -150,15 +184,10 @@ def get_insights(enddate, min_volume, funds=None, top_n=8):
             """)
             df = pd.read_sql(query, conn, params={
                 "cutoff": cutoff, "as_of": int(as_of), "lookback": INSIGHTS_LOOKBACK_DAYS,
-                "min_history": INSIGHTS_MIN_HISTORY, "min_volume": int(min_volume)})
+                "min_history": INSIGHTS_MIN_HISTORY, "min_volume": int(min_volume),
+                "symbols": in_scope})
     finally:
         engine.dispose()
-
-    if funds:
-        src_dir = os.path.dirname(os.path.abspath(__file__))
-        etf_df = pd.read_csv(os.path.join(src_dir, data_dir, mapping_file))
-        in_scope = etf_df[etf_df["Fund"].isin(funds)]["Symbol"].unique()
-        df = df[df["symbol"].isin(in_scope)]
 
     if df.empty:
         # Nothing with enough trailing history (e.g. a gap in the cached

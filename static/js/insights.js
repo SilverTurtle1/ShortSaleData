@@ -252,6 +252,24 @@
             function(r) { return r.short_pct.toFixed(1) + '% vs ' + r.avg_short_pct.toFixed(1) + '% avg'; }, data.as_of));
     };
 
+    // The query can take a few seconds on a cold server -- show that
+    // something is happening instead of a blank gap (and drop the previous
+    // date's results and tile badges, which would be misleading now).
+    function showLoading() {
+        surgeFlags = {};
+        window.applyTileBadges();
+        document.getElementById('insights-panel').classList.remove('hidden');
+        document.getElementById('insights-asof').textContent = '';
+        document.getElementById('insights-toggle').classList.add('hidden');
+        document.getElementById('insights-body').innerHTML = '';
+        var strip = document.getElementById('insights-strip');
+        strip.innerHTML = '';
+        var p = document.createElement('p');
+        p.className = 'insights-empty';
+        p.textContent = 'Loading unusual activity\u2026';
+        strip.appendChild(p);
+    }
+
     // Only depends on the end date, volume floor and ETF selection -- not
     // on the % buckets or start date -- so skip the round trip when none
     // of those changed (e.g. toggling a bucket checkbox).
@@ -259,6 +277,7 @@
         var key = [endDate, minVol, funds.join(',')].join('|');
         if (key === lastKey) return;
         lastKey = key;
+        showLoading();
         fetch('/insights/' + endDate + '/' + minVol + '/' + funds.join(','))
             .then(function(res) { return res.json(); })
             .then(function(data) { if (key === lastKey) window.renderInsights(data); })
